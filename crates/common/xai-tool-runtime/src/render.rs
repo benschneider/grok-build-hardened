@@ -174,13 +174,12 @@ pub struct ToolStreamError {
     pub typed_error: Option<Value>,
 }
 
-/// Apply the hardened **untrusted external** filter to model-facing content
-/// blocks (MCP / tools / file / web / shell text that reaches the model).
+/// Mid-stack untrusted filter on hub **ContentBlock**s (MCP / tools).
 ///
-/// - **Text** and **Resource.text**: security Unicode stripped; languages kept;
-///   residual-risk analysis may prepend `<untrusted_content>`.
-/// - **Image**: statistical / container checks on decoded bytes; if elevated,
-///   a warning text block is inserted **before** the image (bytes unchanged).
+/// - **Text** / **Resource.text**: untrusted-external policy (notes + security strip).
+/// - **Image**: statistical checks; warning text block before image if elevated.
+///
+/// Sampling hard strip is applied later in chat-state model-bound assembly.
 pub fn sanitize_model_content_blocks(blocks: Vec<ContentBlock>) -> Vec<ContentBlock> {
     use xai_grok_input_sanitize::{
         decode_base64_image, filter_untrusted_text, image_untrusted_note, UntrustedSource,

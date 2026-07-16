@@ -1,9 +1,12 @@
-//! Sanitize **external** text that is not user-typed in the terminal.
+//! Mid-stack filter for **external** text (not user terminal input).
 //!
-//! Covers MCP tool results, file reads, web fetch, shell stdout, and similar
-//! untrusted streams that enter the model context. Uses
-//! [`SanitizePolicy::untrusted_external`] (keep languages; strip security
-//! Unicode + residual analysis).
+//! Covers MCP/tool results, file reads, web fetch, shell stdout, shared skills,
+//! AGENTS.md, hooks, and reminders. Uses [`SanitizePolicy::untrusted_external`]
+//! (keep languages; strip security Unicode + residual analysis notes).
+//!
+//! **Not** the sampling security choke. Invisibles + exotic emoji are hard-stripped
+//! on the model-bound conversation clone via [`crate::hard_filter_model_text`].
+//! Mid-stack exists for early envelopes in history and poison shared markdown.
 
 use crate::note::format_untrusted_note;
 use crate::policy::SanitizePolicy;

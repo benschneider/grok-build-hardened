@@ -1988,8 +1988,9 @@ fn requirement_error_from_param_error(
     out
 }
 
-/// Filter tool `prompt_text` under the untrusted-external policy before it
-/// enters model context (MCP, files, web, shell, …).
+/// Mid-stack untrusted filter on tool `prompt_text` (analysis envelopes +
+/// security Unicode). Sampling hard strip (invisibles + exotic emoji) is
+/// applied later in chat-state `build_conversation_request` only.
 fn sanitize_tool_prompt_text(output: &ToolOutput, prompt_text: String) -> String {
     use xai_grok_input_sanitize::{filter_untrusted_text, UntrustedSource};
 

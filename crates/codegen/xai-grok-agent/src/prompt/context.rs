@@ -293,12 +293,11 @@ impl PromptContext {
                 tool_bridge.render_prompt(body, &placeholders).await?
             }
         };
-        // Shared/custom/assembled system prompts enter every turn — filter as
-        // untrusted external content (skills/marketplace/project overrides).
-        Some(xai_grok_input_sanitize::filter_untrusted_text(
-            &prompt,
-            xai_grok_input_sanitize::UntrustedSource::SystemPrompt,
-        ))
+        // No mid-stack full filter here: AGENTS.md/skills are filtered at load,
+        // and model-bound hard_filter_model_text is the sampling security hop.
+        // Re-running untrusted analysis on the full system prompt bloated tokens
+        // and duplicated egress policy.
+        Some(prompt)
     }
 }
 #[cfg(test)]

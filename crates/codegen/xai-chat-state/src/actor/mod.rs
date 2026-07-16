@@ -7,7 +7,7 @@
 
 mod mutations;
 mod queries;
-pub(crate) mod request_builder;
+pub mod request_builder;
 pub mod state;
 
 #[cfg(test)]

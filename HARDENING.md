@@ -255,28 +255,24 @@ Update ─────── x.ai/cli + GCS ──► replace binary
 
 ---
 
-## 9. Input sanitize (ASCII keyboard default)
+## 9. Input sanitize (simplified architecture)
 
-**Status:** engine + modular pager adapter fully wired for adversarial testing:
+**Status:** three named policies; **model-bound egress is the hard security choke**.
 
-- Paste / submit / interject / bash / headless text+JSON
-- Model notes + security toast + residual-risk analysis
-- `/input-allow` / `/input-deny` / status (session + **user/project config.toml**)
-- Base policy loaded from `[input_sanitize]` at agent creation
+| Policy | Constructor | Role |
+|--------|-------------|------|
+| **terminal** | `SanitizePolicy::terminal()` / `default()` | User TUI/headless: ASCII keyboard, toasts, `<input_sanitize>` notes |
+| **untrusted_external** | `SanitizePolicy::untrusted_external()` | Mid-stack only: shared tools/skills/AGENTS/hooks — keep languages, strip security Unicode, residual analysis notes |
+| **model_bound** | `hard_filter_model_text` / `SanitizePolicy::model_bound()` | **Sampling clone only**: silent hard strip of invisibles + exotic emoji (+ density cap on basic emoji spam) |
+
+Mid-stack filters do **not** replace model-bound. System prompt render no longer re-runs full untrusted analysis (token bloat + duplicate policy).
 
 ### Goal
 
-Reduce prompt-injection and spoofing that relies on **invisible or deceptive Unicode**
-(zero-width, bidi controls, math lookalike letters, emoji smuggling) while keeping
-normal English keyboard input seamless.
+Reduce prompt-injection and spoofing (invisible Unicode, exotic emoji token stuffing,
+shared skill/AGENTS/tool poison) while keeping usable languages and basic smileys.
 
-**Also flag** residual risk on *cleaned* text: pure-ASCII jailbreaks, encoded blobs,
-whitespace bit-channels, ZW interleave transforms, and strip-reveals-payload patterns.
-Mechanical filtering alone can leave a new, harmless-looking prompt that is still an
-attack “under the eyes” of the user.
-
-Analysis is heuristic (not a trained classifier). Still need sandbox, permissions, and
-user judgment for novel attacks.
+Analysis on untrusted/terminal paths is heuristic. Sandbox + permissions remain the floor.
 
 ### Default allowlist
 
@@ -362,56 +358,34 @@ latin_extended = "keep"   # example opt-in
 /input-allow status
 ```
 
-### Untrusted external content (tools / MCP / files / web)
+### Untrusted external (mid-stack, not egress)
 
-**Problem:** Worst injections often arrive *indirectly* via MCP results, README/file
-reads, web_fetch, and shell stdout — not via terminal typing.
+Shared skills, AGENTS.md, tool results, hooks: `filter_untrusted_text` for early
+`<untrusted_content>` envelopes + security Unicode strip. Does **not** hard-strip
+exotic emoji (model-bound does). Sites: `finalize_output`, skills builders, reminders,
+tool-runtime ContentBlocks, agents_md load, hook deny reasons.
 
-**Policy** (`SanitizePolicy::untrusted_external`): keep languages/punctuation/emoji/tabs;
-strip all security Unicode; run residual-risk analysis. When strip/analysis fires, wrap
-with `<untrusted_content source="…">` so the model does not treat tool text as system.
+### Model-bound hard filter (sampling egress — security core)
 
-**Choke points:**
+**Choke point:** `ChatStateActor::build_conversation_request` →
+`hard_filter_conversation_items` / `hard_filter_model_text` on system, user, assistant
+(content + tool-call args), and tool results. Stored history/UI unchanged.
 
-1. **Main agent loop:** `FinalizedToolset::finalize_output` — tool `prompt_text`
-   (MCP, read_file, web_fetch, bash, …) before `<system-reminder>` append.
-2. **Hub / ContentBlock path:** `sanitize_model_content_blocks` on
-   `TypedToolOutput.model_output`.
-3. **Skills:** `build_skill_message` / `build_skill_block` (marketplace + local).
-4. **System prompt:** `PromptContext::render` final output; **AGENTS.md/rules**
-   at load time.
-5. **Hooks:** deny `reason` / client `systemMessage` (command, HTTP, client).
-6. **Reminders:** `wrap_reminder_with_tag` bodies.
-
-Shared/installed skills and system prompts are **not** trusted by label —
-they are filtered the same as file/web content.
-
-### Model-bound hard filter (sampling egress)
-
-**Choke point:** `ChatStateActor::build_conversation_request` — last clone of
-conversation items before the sampling API.
-
-**Silent hard strip** via `SanitizePolicy::model_bound` / `hard_filter_model_text`:
-
-| Always strip | Keep |
-|--------------|------|
+| Always strip | Keep (unless density-capped) |
+|--------------|------------------------------|
 | Invisibles / bidi / lookalikes / controls / fillers | Languages, punctuation, tabs |
-| **Exotic emoji chrome** (flags/RI, skin tones, VS-16, keycap, U+1F900–1FAFF supplemental, cards/mahjong, …) | Basic faces/symbols (😀 👍 ✅ 🎉 …), real code/docs |
-
-Does **not** rewrite stored history or the TUI — only the model-bound payload.
-No analysis notes at this edge (notes would waste tokens).
+| Exotic emoji (flags, skin tones, VS-16, ZWJ, U+1F900–1FAFF, …) | Basic 😀 👍 ✅ 🎉 |
+| All emoji if basic emoji count > `EMOJI_DENSITY_CAP` (48) | Real code/docs |
 
 ### Modules
 
 | Path | Role |
 |------|------|
-| `xai-grok-input-sanitize` | Terminal + untrusted policies, analyze, notes |
-| `xai-grok-tools` finalize_output / skills / reminders | Tool + skill + reminder filters |
-| `xai-tool-runtime` | ContentBlock model_output filter (hub path) |
-| `xai-grok-agent` render / agents_md | System prompt + AGENTS.md |
-| `xai-grok-hooks` / shell client hooks | Hook deny reasons |
-| `pager/src/input_sanitize/` | Session overlay, apply, **persist** |
-| `tests/adversarial.rs` | Adversarial goldens |
+| `xai-grok-input-sanitize` | Named policies, analyze, untrusted, model_bound, images |
+| `xai-chat-state` request_builder | **Model-bound hard strip on sampling clone** |
+| `xai-grok-tools` / tool-runtime / agent agents_md / hooks | Mid-stack untrusted only |
+| `pager/src/input_sanitize/` | Terminal UX policy + persist |
+| `tests/adversarial.rs`, `chat-state/tests/model_bound_assembly.rs` | Adversarial goldens |
 
 ```bash
 cargo test -p xai-grok-input-sanitize
@@ -431,6 +405,7 @@ cargo test -p xai-tool-runtime --lib extract_strips
 | 2026-07-16 | Adversarial harden: pending paste notes, interject/bash/JSON gates, filler→security, fail-closed headless reject |
 | 2026-07-16 | Residual-risk analysis: statistical/stego/phrase signals on cleaned text + strip transform |
 | 2026-07-16 | Untrusted external filter: tools/MCP/files/web + skills + system prompts + AGENTS.md + hooks + reminders |
+| 2026-07-16 | Model-bound hard strip + architecture simplify (named policies; demote system-prompt re-filter) |
 
 ---
 

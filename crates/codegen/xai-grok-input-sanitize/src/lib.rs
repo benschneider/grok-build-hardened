@@ -50,7 +50,7 @@ pub use sanitize::{
     model_payload, model_payload_with_body, sanitize, security_toast, CategoryHit, SanitizeError,
     SanitizeResult,
 };
-pub use model_bound::hard_filter_model_text;
+pub use model_bound::{hard_filter_model_text, is_exotic_emoji, EMOJI_DENSITY_CAP};
 pub use untrusted::{
     filter_untrusted_text, sanitize_untrusted, untrusted_model_payload, UntrustedSource,
 };

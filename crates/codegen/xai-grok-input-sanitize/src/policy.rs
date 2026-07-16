@@ -39,12 +39,15 @@ impl CategoryAction {
 }
 
 /// Full sanitize policy (runtime).
+///
+/// Prefer named constructors rather than ad-hoc category toggles:
+/// - [`SanitizePolicy::default`] / [`SanitizePolicy::terminal`] — user TUI input
+/// - [`SanitizePolicy::untrusted_external`] — mid-stack shared/tool content
+/// - [`SanitizePolicy::model_bound`] — sampling egress (use via [`crate::hard_filter_model_text`])
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SanitizePolicy {
     /// When false, return input unchanged with an empty report.
     pub enabled: bool,
-    /// Whether emoji keep also preserves ZWJ / VS-16 used in sequences.
-    pub allow_emoji_joiners: bool,
     /// Toast / notify when security categories fire (UI layer reads this).
     pub notify_when_stripped: bool,
     /// Run statistical / steganographic analysis on raw + cleaned text.
@@ -60,7 +63,6 @@ impl Default for SanitizePolicy {
         }
         Self {
             enabled: true,
-            allow_emoji_joiners: true,
             notify_when_stripped: true,
             analyze_enabled: true,
             actions,
@@ -69,13 +71,21 @@ impl Default for SanitizePolicy {
 }
 
 impl SanitizePolicy {
+    /// Alias for [`Default`]: ASCII-keyboard terminal / headless user input.
+    pub fn terminal() -> Self {
+        Self::default()
+    }
+
     /// Policy for **external / tool** content (MCP results, file reads, web
     /// fetch, shell stdout, etc.).
     ///
+    /// Mid-stack only: analysis notes + security Unicode strip for shared
+    /// content. **Not** the sampling hard strip — that is [`Self::model_bound`]
+    /// / [`crate::hard_filter_model_text`] on the conversation request clone.
+    ///
     /// Keeps capability Unicode (languages, punctuation, emoji, tabs) so real
-    /// docs and code survive. Still **strips all security categories** (ZW,
-    /// bidi, lookalikes, controls, PUA, noncharacters) and runs residual-risk
-    /// analysis. Stricter than nothing; looser than the terminal ASCII default.
+    /// docs and code survive. Still **strips all security categories** and runs
+    /// residual-risk analysis.
     pub fn untrusted_external() -> Self {
         let mut p = Self::default();
         for cat in [

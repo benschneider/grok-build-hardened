@@ -160,7 +160,10 @@ impl ChatStateActor {
 
 /// Strip invisible Unicode and **exotic** emoji from every text field that
 /// will be sent to the model. Basic smileys are kept. Images untouched.
-fn hard_filter_conversation_items(
+///
+/// Public so adversarial tests can drive the same transform as
+/// [`ChatStateActor::build_conversation_request`] without re-implementing it.
+pub fn hard_filter_conversation_items(
     mut items: Vec<ConversationItem>,
 ) -> Vec<ConversationItem> {
     use xai_grok_input_sanitize::hard_filter_model_text;
