@@ -1,6 +1,8 @@
 //! Apply sanitize policy to inbound text (paste vs send).
 
-use xai_grok_input_sanitize::{model_payload, sanitize, security_toast, SanitizeError, SanitizeResult};
+use xai_grok_input_sanitize::{
+    model_payload, model_payload_with_body, sanitize, security_toast, SanitizeError, SanitizeResult,
+};
 
 use super::session::InputSanitizeSession;
 
@@ -8,8 +10,17 @@ use super::session::InputSanitizeSession;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApplyKind {
     /// Clean text for the prompt buffer (user sees this).
+    ///
+    /// Records a pending strip report so a later [`ApplyKind::Send`] can still
+    /// attach a model note after the composer is already clean.
     Ui,
+    /// Clean text only (no model note, no pending mutation). For bash / shell.
+    Strip,
     /// Clean text + optional model note for the agent.
+    ///
+    /// Does **not** clear pending strip reports — call
+    /// [`InputSanitizeSession::clear_pending_strip_report`] after the send
+    /// actually enqueues so deferred paths (project picker) keep the note.
     Send,
 }
 
@@ -22,6 +33,8 @@ pub struct AppliedInput {
     pub model_text: String,
     pub result: SanitizeResult,
     pub toast: Option<String>,
+    /// True when model_text used a pending paste note or a fresh strip note.
+    pub attached_model_note: bool,
 }
 
 impl AppliedInput {
@@ -39,9 +52,22 @@ impl AppliedInput {
             None
         };
         let display_text = result.text.clone();
-        let model_text = match kind {
-            ApplyKind::Ui => display_text.clone(),
-            ApplyKind::Send => model_payload(&result),
+        let (model_text, attached_model_note) = match kind {
+            ApplyKind::Ui => {
+                session.note_ui_strip(&result);
+                (display_text.clone(), false)
+            }
+            ApplyKind::Strip => (display_text.clone(), false),
+            ApplyKind::Send => {
+                if result.needs_model_note() {
+                    (model_payload(&result), true)
+                } else if let Some(pending) = session.pending_strip_report() {
+                    // Paste-time strip/analysis note on already-clean composer text.
+                    (model_payload_with_body(pending, &result.text), true)
+                } else {
+                    (result.text.clone(), false)
+                }
+            }
         };
         session.record(raw.to_owned(), result.clone());
         Ok(Self {
@@ -49,6 +75,7 @@ impl AppliedInput {
             model_text,
             result,
             toast,
+            attached_model_note,
         })
     }
 }

@@ -11,6 +11,8 @@ use crate::policy::{CategoryAction, SanitizePolicy};
 pub struct InputSanitizeConfig {
     pub enabled: Option<bool>,
     pub notify_when_stripped: Option<bool>,
+    /// Statistical / steganographic residual-risk analysis (default true).
+    pub analyze: Option<bool>,
     pub tab: Option<CategoryAction>,
     pub control_c0_c1: Option<CategoryAction>,
     pub bidi_controls: Option<CategoryAction>,
@@ -35,6 +37,9 @@ impl InputSanitizeConfig {
         if let Some(v) = self.notify_when_stripped {
             p.notify_when_stripped = v;
         }
+        if let Some(v) = self.analyze {
+            p.analyze_enabled = v;
+        }
         let pairs: &[(RiskCategory, Option<CategoryAction>)] = &[
             (RiskCategory::Tab, self.tab),
             (RiskCategory::ControlC0C1, self.control_c0_c1),
@@ -52,10 +57,7 @@ impl InputSanitizeConfig {
         for &(cat, action) in pairs {
             if let Some(a) = action {
                 // Security keep is ignored at config load (fail closed).
-                if a == CategoryAction::Keep && !cat.allow_user_keep() {
-                    continue;
-                }
-                p.set_action(cat, a);
+                let _ = p.set_action(cat, a);
             }
         }
         p
@@ -68,6 +70,9 @@ impl InputSanitizeConfig {
         }
         if other.notify_when_stripped.is_some() {
             self.notify_when_stripped = other.notify_when_stripped;
+        }
+        if other.analyze.is_some() {
+            self.analyze = other.analyze;
         }
         merge_opt(&mut self.tab, other.tab);
         merge_opt(&mut self.control_c0_c1, other.control_c0_c1);

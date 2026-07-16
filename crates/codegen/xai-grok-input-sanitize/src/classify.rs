@@ -37,6 +37,7 @@ pub fn classify(c: char, policy: &SanitizePolicy) -> RiskCategory {
         return RiskCategory::MathAlphanumeric;
     }
 
+    // VS16 (emoji presentation) rides with emoji keep; VS1–15 are security.
     if is_emoji_codepoint(cp)
         || cp == 0xFE0F
         || (cp == 0x200D && policy.action(RiskCategory::Emoji) == CategoryAction::Keep)
@@ -44,7 +45,9 @@ pub fn classify(c: char, policy: &SanitizePolicy) -> RiskCategory {
         return RiskCategory::Emoji;
     }
 
-    if is_zero_width_format(cp) {
+    // Invisible fillers / default-ignorables / smuggling spaces — security,
+    // not re-enableable via unicode_punctuation / unicode_letters.
+    if is_zero_width_format(cp) || is_invisible_filler(cp) {
         return RiskCategory::ZeroWidthFormat;
     }
 
@@ -94,6 +97,36 @@ fn is_zero_width_format(cp: u32) -> bool {
             | 0xFFF9..=0xFFFB
             | 0xE0001
             | 0xE0020..=0xE007F
+    )
+}
+
+/// Invisible / blank / variation-selector fillers often used for spoofing.
+/// Kept as [`RiskCategory::ZeroWidthFormat`] (security; not user-keepable).
+fn is_invisible_filler(cp: u32) -> bool {
+    matches!(
+        cp,
+        // Variation selectors 1–15 (16 is emoji presentation → Emoji bucket)
+        0xFE00..=0xFE0E
+            // Mongolian free variation selectors
+            | 0x180B..=0x180D
+            // Hangul fillers (choseong / jungseong / Hangul filler)
+            | 0x115F
+            | 0x1160
+            | 0x3164
+            // Braille pattern blank
+            | 0x2800
+            // Khmer inherent vowels (default-ignorable)
+            | 0x17B4
+            | 0x17B5
+            // Object replacement character
+            | 0xFFFC
+            // Unicode spaces that smuggle / pad without ASCII space
+            | 0x00A0
+            | 0x1680
+            | 0x2000..=0x200A
+            | 0x202F
+            | 0x205F
+            | 0x3000
     )
 }
 

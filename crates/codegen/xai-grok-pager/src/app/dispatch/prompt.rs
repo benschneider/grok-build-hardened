@@ -316,13 +316,11 @@ pub(super) fn dispatch_send_prompt_inner(
     }
 
     // Authoritative sanitize at submit (covers typed Unicode, not only paste).
-    // Slash commands pass through without model notes.
-    let text = {
-        let trimmed_check = text.trim();
-        let is_slash = !literal && trimmed_check.starts_with('/');
-        if is_slash {
-            text
-        } else if let ActiveView::Agent(id) = app.active_view {
+    // Always strip. Model notes attach for plain prompts / slash passthrough.
+    // Slash *commands* parse on cleaned display text so ZWSP cannot smuggle
+    // past the registry; PassThrough / plain send use model_text (with note).
+    let (display_text, model_text, clear_pending_note) = {
+        if let ActiveView::Agent(id) = app.active_view {
             if let Some(agent) = app.agents.get_mut(&id) {
                 use crate::input_sanitize::{ApplyKind, AppliedInput};
                 match AppliedInput::apply(&mut agent.input_sanitize, &text, ApplyKind::Send) {
@@ -330,7 +328,11 @@ pub(super) fn dispatch_send_prompt_inner(
                         if let Some(ref toast) = applied.toast {
                             agent.show_toast(toast);
                         }
-                        applied.model_text
+                        (
+                            applied.display_text,
+                            applied.model_text,
+                            applied.attached_model_note,
+                        )
                     }
                     Err(e) => {
                         agent.show_toast(&e.to_string());
@@ -338,19 +340,23 @@ pub(super) fn dispatch_send_prompt_inner(
                     }
                 }
             } else {
-                text
+                (text.clone(), text, false)
             }
         } else {
-            text
+            (text.clone(), text, false)
         }
     };
+    // Default `text` is model-facing (note + cleaned). Slash branch rebinds
+    // to display_text for parse; plain path keeps model_text.
+    let text = model_text;
 
     // The picker intercepts only real, user-authored prompts; slash commands,
     // exit aliases, empty input, and literal chip submissions pass through so
     // they never spawn it (a chip is a model suggestion for an already-running
     // session, not the first-prompt project choice).
-    if !literal && input_can_trigger_project_picker(&text) && app.needs_project_picker() {
-        return open_project_question(app, text);
+    if !literal && input_can_trigger_project_picker(&display_text) && app.needs_project_picker() {
+        // Do not clear pending note — the real send after the picker still needs it.
+        return open_project_question(app, display_text);
     }
 
     let ActiveView::Agent(id) = app.active_view else {
@@ -387,7 +393,8 @@ pub(super) fn dispatch_send_prompt_inner(
     // (ambient tips live out their TTL across the submit).
     agent.ephemeral_tip.clear_on_submit();
 
-    let trimmed = text.trim();
+    // Slash detection uses cleaned display text (no model note prefix).
+    let trimmed = display_text.trim();
 
     let mut effects = Vec::new();
 
@@ -597,15 +604,19 @@ pub(super) fn dispatch_send_prompt_inner(
                     );
                 }
             }
-            CommandResult::PassThrough(pass_text) => {
-                // A recognized token later in the passthrough text still styles the echo.
+            CommandResult::PassThrough(_pass_text) => {
+                // Use model_text (cleaned + optional sanitize note), not the
+                // pre-sanitize passthrough string.
                 let skill_token_ranges = agent
                     .prompt
                     .slash_controller
-                    .recognized_token_ranges(&pass_text, &agent.session.models);
+                    .recognized_token_ranges(&text, &agent.session.models);
                 agent
                     .session
-                    .enqueue_prompt_with_skill_tokens(pass_text, skill_token_ranges);
+                    .enqueue_prompt_with_skill_tokens(text.clone(), skill_token_ranges);
+                if clear_pending_note {
+                    agent.input_sanitize.clear_pending_strip_report();
+                }
             }
         }
         if consume_input {
@@ -622,6 +633,10 @@ pub(super) fn dispatch_send_prompt_inner(
         }
         return dispatch(Action::Quit, app);
     } else {
+        // Successful plain-prompt path: drop paste pending note after this send.
+        if clear_pending_note {
+            agent.input_sanitize.clear_pending_strip_report();
+        }
         // ── Server-authoritative immediate send (plain prompt only) ──
         // A plain prompt typed while a turn is RUNNING is sent to the agent
         // immediately instead of being held in the local drip-feed queue. The
@@ -839,6 +854,23 @@ pub(super) fn dispatch_send_bash_command(app: &mut AppView, command: String) -> 
     };
     let Some(agent) = app.agents.get_mut(&id) else {
         return vec![];
+    };
+    // Strip control / invisible chars before the shell sees the command.
+    // No model note (bash is not model-facing).
+    let command = {
+        use crate::input_sanitize::{ApplyKind, AppliedInput};
+        match AppliedInput::apply(&mut agent.input_sanitize, &command, ApplyKind::Strip) {
+            Ok(applied) => {
+                if let Some(ref toast) = applied.toast {
+                    agent.show_toast(toast);
+                }
+                applied.display_text
+            }
+            Err(e) => {
+                agent.show_toast(&e.to_string());
+                return vec![];
+            }
+        }
     };
     // Submitting a bash command retires any edit-contextual ephemeral tip.
     agent.ephemeral_tip.clear_on_submit();

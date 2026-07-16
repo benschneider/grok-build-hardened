@@ -300,8 +300,8 @@ impl AgentView {
         if let Some((outcome, _)) = self.try_handle_dropped_paths_paste(text) {
             return outcome;
         }
-        let _ = self.prompt.handle_paste(text);
-        InputOutcome::Changed
+        // Same sanitize path as main prompt paste (ASCII-keyboard filter).
+        self.insert_prompt_plain_text(Some(text)).0
     }
     /// Returns redraw and completion outcomes only when at least one path resolves.
     ///

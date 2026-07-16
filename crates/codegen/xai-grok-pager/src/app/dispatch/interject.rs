@@ -30,6 +30,27 @@ pub(super) fn dispatch_interject(
         return vec![];
     };
 
+    // Same sanitize gate as SendPrompt (strip + model note / pending paste note).
+    let (display_text, model_text, clear_pending_note) = {
+        use crate::input_sanitize::{ApplyKind, AppliedInput};
+        match AppliedInput::apply(&mut agent.input_sanitize, &text, ApplyKind::Send) {
+            Ok(applied) => {
+                if let Some(ref toast) = applied.toast {
+                    agent.show_toast(toast);
+                }
+                (
+                    applied.display_text,
+                    applied.model_text,
+                    applied.attached_model_note,
+                )
+            }
+            Err(e) => {
+                agent.show_toast(&e.to_string());
+                return vec![];
+            }
+        }
+    };
+
     // Submitting an interjection retires any edit-contextual ephemeral tip —
     // even when there is no active session, matching the prompt/bash/
     // feedback/remember paths.
@@ -39,8 +60,11 @@ pub(super) fn dispatch_interject(
         agent.show_toast("No active session");
         return vec![];
     };
+    if clear_pending_note {
+        agent.input_sanitize.clear_pending_strip_report();
+    }
 
-    record_interject_prompt_history(agent, &text);
+    record_interject_prompt_history(agent, &display_text);
 
     // Push a standard user prompt block locally for instant feedback, and
     // record its id so the broadcast echo (`x.ai/session/interjection`) is
@@ -49,7 +73,7 @@ pub(super) fn dispatch_interject(
     agent.self_interjection_ids.insert(interjection_id.clone());
     agent
         .scrollback
-        .push_block(RenderBlock::interjection_prompt(&text));
+        .push_block(RenderBlock::interjection_prompt(&display_text));
     // Interjecting into a parked wait continues the turn below this block —
     // the withheld "Worked for …" marker must not fire late beneath it.
     agent.suppress_parked_marker_on_interject();
@@ -67,7 +91,7 @@ pub(super) fn dispatch_interject(
         None
     } else {
         Some(crate::prompt_images::build_content_blocks_with_workspace(
-            text.clone(),
+            model_text.clone(),
             images,
             Some(std::path::Path::new(&agent.session.cwd)),
         ))
@@ -76,7 +100,7 @@ pub(super) fn dispatch_interject(
     vec![Effect::SendInterject {
         agent_id: id,
         session_id,
-        text,
+        text: model_text,
         interjection_id,
         blocks,
     }]
@@ -98,6 +122,27 @@ pub(super) fn dispatch_send_prompt_now(
         return vec![];
     };
 
+    // Same sanitize gate as SendPrompt.
+    let (display_text, model_text, clear_pending_note) = {
+        use crate::input_sanitize::{ApplyKind, AppliedInput};
+        match AppliedInput::apply(&mut agent.input_sanitize, &text, ApplyKind::Send) {
+            Ok(applied) => {
+                if let Some(ref toast) = applied.toast {
+                    agent.show_toast(toast);
+                }
+                (
+                    applied.display_text,
+                    applied.model_text,
+                    applied.attached_model_note,
+                )
+            }
+            Err(e) => {
+                agent.show_toast(&e.to_string());
+                return vec![];
+            }
+        }
+    };
+
     // Mid-outage guard (mirrors the plain prompt path): the producers already
     // consumed the payload (composer text / queue row), so requeue it locally
     // instead of firing into a dead channel and losing the message.
@@ -111,10 +156,14 @@ pub(super) fn dispatch_send_prompt_now(
                 images,
                 ..crate::app::agent::QueuedPrompt::plain(
                     queue_id,
-                    &text,
+                    &model_text,
                     crate::app::agent::QueueEntryKind::Prompt,
                 )
             });
+        // Note already baked into model_text for the requeued prompt.
+        if clear_pending_note {
+            agent.input_sanitize.clear_pending_strip_report();
+        }
         agent.show_toast("Reconnecting, please wait...");
         return vec![];
     }
@@ -126,8 +175,11 @@ pub(super) fn dispatch_send_prompt_now(
         agent.show_toast("No active session");
         return vec![];
     };
+    if clear_pending_note {
+        agent.input_sanitize.clear_pending_strip_report();
+    }
 
-    record_interject_prompt_history(agent, &text);
+    record_interject_prompt_history(agent, &display_text);
 
     let prompt_id = uuid::Uuid::new_v4().to_string();
     // Self-originated: the ACP gate must treat this prompt's deltas as ours.
@@ -138,23 +190,23 @@ pub(super) fn dispatch_send_prompt_now(
     if agent.expects_send_now_cancel() {
         agent.arm_send_now_expectation(prompt_id.clone());
         // The arm hides the queue echo pushed below — paint the block now.
-        super::queue::push_send_now_user_block(agent, &prompt_id, "prompt", &text, false);
+        super::queue::push_send_now_user_block(agent, &prompt_id, "prompt", &display_text, false);
     }
     agent.suppress_parked_marker_on_interject();
 
     let blocks = crate::prompt_images::build_content_blocks_with_workspace(
-        text.clone(),
+        model_text.clone(),
         images,
         Some(std::path::Path::new(&agent.session.cwd)),
     );
 
     // Optimistic queue-pane echo, reconciled by the shell's queue broadcast.
     let sid_str = session_id.0.to_string();
-    super::queue::push_server_queue_echo(app, id, &sid_str, &prompt_id, &text, "prompt");
+    super::queue::push_server_queue_echo(app, id, &sid_str, &prompt_id, &display_text, "prompt");
     crate::unified_log::info(
         "prompt.send_now",
         Some(&sid_str),
-        Some(serde_json::json!({ "len": text.len(), "prompt_id": prompt_id })),
+        Some(serde_json::json!({ "len": model_text.len(), "prompt_id": prompt_id })),
     );
 
     vec![Effect::SendPromptNow {

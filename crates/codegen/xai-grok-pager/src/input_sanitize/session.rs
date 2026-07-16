@@ -12,6 +12,11 @@ pub struct InputSanitizeSession {
     session_keeps: Vec<RiskCategory>,
     pub last_raw: Option<String>,
     pub last_result: Option<SanitizeResult>,
+    /// Strip report from paste/Ui that still needs a model note on the next
+    /// Send (composer is already clean, so re-sanitize alone would drop it).
+    /// Cleared only after a successful model-facing send via
+    /// [`Self::clear_pending_strip_report`].
+    pending_strip_report: Option<SanitizeResult>,
 }
 
 impl Default for InputSanitizeSession {
@@ -27,6 +32,7 @@ impl InputSanitizeSession {
             session_keeps: Vec::new(),
             last_raw: None,
             last_result: None,
+            pending_strip_report: None,
         }
     }
 
@@ -63,6 +69,24 @@ impl InputSanitizeSession {
         self.last_result = Some(result);
     }
 
+    /// Remember a Ui report so the next Send can still attach a model note
+    /// (strip hits and/or elevated residual-risk analysis).
+    pub fn note_ui_strip(&mut self, result: &SanitizeResult) {
+        if result.needs_model_note() {
+            self.pending_strip_report = Some(result.clone());
+        }
+    }
+
+    /// Borrow pending paste/Ui strip report (does not clear).
+    pub fn pending_strip_report(&self) -> Option<&SanitizeResult> {
+        self.pending_strip_report.as_ref()
+    }
+
+    /// Clear pending after a successful model-facing send.
+    pub fn clear_pending_strip_report(&mut self) {
+        self.pending_strip_report = None;
+    }
+
     pub fn status_text(&self) -> String {
         let p = self.policy();
         let mut lines = vec![
@@ -78,12 +102,17 @@ impl InputSanitizeSession {
             };
             lines.push(format!("  {} = {}{scope}", cat.as_str(), action.as_str()));
         }
+        if self.pending_strip_report.is_some() {
+            lines.push("pending_model_note: yes (from paste/Ui strip or analysis)".into());
+        }
         if let Some(ref r) = self.last_result {
             lines.push(format!(
-                "last: {} → {} chars, {} categories flagged",
+                "last: {} → {} chars, {} categories flagged, analysis={}({})",
                 r.original_len,
                 r.cleaned_len,
-                r.hits.len()
+                r.hits.len(),
+                r.analysis.level.as_str(),
+                r.analysis.score
             ));
         }
         lines.join("\n")

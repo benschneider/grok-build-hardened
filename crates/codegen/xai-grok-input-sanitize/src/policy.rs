@@ -47,6 +47,8 @@ pub struct SanitizePolicy {
     pub allow_emoji_joiners: bool,
     /// Toast / notify when security categories fire (UI layer reads this).
     pub notify_when_stripped: bool,
+    /// Run statistical / steganographic analysis on raw + cleaned text.
+    pub analyze_enabled: bool,
     actions: BTreeMap<RiskCategory, CategoryAction>,
 }
 
@@ -60,6 +62,7 @@ impl Default for SanitizePolicy {
             enabled: true,
             allow_emoji_joiners: true,
             notify_when_stripped: true,
+            analyze_enabled: true,
             actions,
         }
     }
@@ -73,22 +76,27 @@ impl SanitizePolicy {
             .unwrap_or(CategoryAction::Strip)
     }
 
-    pub fn set_action(&mut self, cat: RiskCategory, action: CategoryAction) {
+    /// Set a category action. Security categories cannot be set to [`CategoryAction::Keep`].
+    pub fn set_action(
+        &mut self,
+        cat: RiskCategory,
+        action: CategoryAction,
+    ) -> Result<(), PolicyError> {
+        if action == CategoryAction::Keep && !cat.allow_user_keep() {
+            return Err(PolicyError::SecurityKeepForbidden(cat));
+        }
         self.actions.insert(cat, action);
+        Ok(())
     }
 
     /// Set a capability category to keep (rejects security categories).
     pub fn allow_keep(&mut self, cat: RiskCategory) -> Result<(), PolicyError> {
-        if !cat.allow_user_keep() {
-            return Err(PolicyError::SecurityKeepForbidden(cat));
-        }
-        self.set_action(cat, CategoryAction::Keep);
-        Ok(())
+        self.set_action(cat, CategoryAction::Keep)
     }
 
     /// Set category back to strip.
     pub fn deny_keep(&mut self, cat: RiskCategory) {
-        self.set_action(cat, CategoryAction::Strip);
+        let _ = self.set_action(cat, CategoryAction::Strip);
     }
 
     pub fn actions_iter(&self) -> impl Iterator<Item = (RiskCategory, CategoryAction)> + '_ {

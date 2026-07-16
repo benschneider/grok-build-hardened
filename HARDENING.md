@@ -257,8 +257,11 @@ Update ─────── x.ai/cli + GCS ──► replace binary
 
 ## 9. Input sanitize (ASCII keyboard default)
 
-**Status:** engine + modular pager adapter wired (paste/submit/headless + slash).
-Permanent config write for `--user`/`--project` still TBD (session allow works).
+**Status:** engine + modular pager adapter wired (paste/submit/interject/send-now/bash/
+headless text+JSON + slash passthrough). Pending paste strip report re-attaches model
+notes on submit. Residual-risk **analysis** (statistical / steganographic / phrase
+heuristics) runs after the mechanical pass. Permanent config write for `--user`/`--project`
+still TBD (session allow works).
 
 ### Goal
 
@@ -266,8 +269,13 @@ Reduce prompt-injection and spoofing that relies on **invisible or deceptive Uni
 (zero-width, bidi controls, math lookalike letters, emoji smuggling) while keeping
 normal English keyboard input seamless.
 
-**Does not stop** plain-English injection (“ignore previous instructions”). Still
-need sandbox, permissions, and user judgment.
+**Also flag** residual risk on *cleaned* text: pure-ASCII jailbreaks, encoded blobs,
+whitespace bit-channels, ZW interleave transforms, and strip-reveals-payload patterns.
+Mechanical filtering alone can leave a new, harmless-looking prompt that is still an
+attack “under the eyes” of the user.
+
+Analysis is heuristic (not a trained classifier). Still need sandbox, permissions, and
+user judgment for novel attacks.
 
 ### Default allowlist
 
@@ -299,11 +307,30 @@ Actions: `strip` | `keep` | `reject`.
 
 ### Runtime behavior (target UX)
 
-1. On paste/submit: sanitize → cleaned text.
-2. If any category fired: model gets `<input_sanitize>…</input_sanitize>` note.
+1. On paste/submit: sanitize → cleaned text → **analyze** residual risk.
+2. If any category fired **or** analysis ≥ medium: model gets `<input_sanitize>…</input_sanitize>` note.
 3. **Security hits:** model must **warn the user** (invisible/deceptive chars; possible injection).
-4. **Capability hits:** model may suggest `/input-allow <cat> --session|--user|--project`.
-5. User enables extensions via command (session or permanent config). Model cannot self-enable.
+4. **Analysis elevated:** model must warn that cleaned text may still be an attack; confirm intent.
+5. **Capability hits:** model may suggest `/input-allow <cat> --session|--user|--project`.
+6. User enables extensions via command (session or permanent config). Model cannot self-enable.
+
+### Residual-risk analysis (post-filter)
+
+| Signal | What it catches |
+|--------|-----------------|
+| `security_carrier_density` | High ratio of ZW/bidi/lookalike carriers |
+| `strip_reveals_payload` | Heavy strip still leaves a long alphabetic message |
+| `zero_width_interleave` | ZW/bidi between letters (stego channel) |
+| `whitespace_bit_channel` | 1- vs 2-space run patterns |
+| `dual_channel_divergence` | Visible-ish projection ≠ cleaned structure |
+| `high_entropy_cleaned` | Shannon entropy in packed/encoded band |
+| `encoded_blob` | Long base64/hex spans |
+| `injection_phrase` | Classic jailbreak / override phrases on cleaned ASCII |
+| `role_override_density` | Clusters of instruction-control markers |
+| `char_distribution_anomaly` | χ² vs English letter baseline |
+| `symbol_digit_skew` | Digit/symbol-heavy “prose” |
+
+Score 0–100 → level none/low/medium/high/critical. Medium+ attaches model note + toast.
 
 ### Config sketch (not yet wired)
 
@@ -311,6 +338,7 @@ Actions: `strip` | `keep` | `reject`.
 [input_sanitize]
 enabled = true
 notify_when_stripped = true
+analyze = true
 tab = "strip"
 latin_extended = "strip"
 emoji = "strip"
@@ -319,7 +347,7 @@ emoji = "strip"
 
 ### Crate
 
-- `crates/codegen/xai-grok-input-sanitize` — pure `sanitize()` + `format_model_note()`
+- `crates/codegen/xai-grok-input-sanitize` — `sanitize()` + `analyze` + `format_model_note()`
 - Tests: `cargo test -p xai-grok-input-sanitize`
 
 ---
@@ -331,6 +359,8 @@ emoji = "strip"
 | 2026-07-15 | Phase 0: DNS-pin SSRF, expanded dangerous commands, `deny.toml`, sandbox example |
 | 2026-07-16 | Phase 1 input sanitize: `xai-grok-input-sanitize` engine (ASCII default + categories) |
 | 2026-07-16 | Modular wire-up: paste/submit/headless sanitize, model note, `/input-allow` session |
+| 2026-07-16 | Adversarial harden: pending paste notes, interject/bash/JSON gates, filler→security, fail-closed headless reject |
+| 2026-07-16 | Residual-risk analysis: statistical/stego/phrase signals on cleaned text + strip transform |
 
 ---
 

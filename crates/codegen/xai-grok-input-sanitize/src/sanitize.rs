@@ -1,9 +1,10 @@
-//! Core sanitize pass.
+//! Core sanitize pass + analysis attachment.
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::analyze::{analyze, AnalysisReport};
 use crate::category::{RiskCategory, Severity};
 use crate::classify::{classify, is_base_allowed};
 use crate::policy::{CategoryAction, SanitizePolicy};
@@ -18,12 +19,14 @@ pub struct CategoryHit {
 }
 
 /// Outcome of a successful sanitize.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SanitizeResult {
     pub text: String,
     pub hits: Vec<CategoryHit>,
     pub original_len: usize,
     pub cleaned_len: usize,
+    /// Statistical / steganographic residual-risk report (on raw + cleaned).
+    pub analysis: AnalysisReport,
 }
 
 impl SanitizeResult {
@@ -49,6 +52,11 @@ impl SanitizeResult {
             .iter()
             .filter(|h| h.action != CategoryAction::Keep && h.count > 0)
     }
+
+    /// Whether the model should receive an `<input_sanitize>` note.
+    pub fn needs_model_note(&self) -> bool {
+        self.stripped_hits().next().is_some() || self.analysis.should_warn()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -62,7 +70,7 @@ pub enum SanitizeError {
     },
 }
 
-/// Sanitize `input` under `policy`.
+/// Sanitize `input` under `policy`, then analyze residual injection risk.
 pub fn sanitize(input: &str, policy: &SanitizePolicy) -> Result<SanitizeResult, SanitizeError> {
     let original_len = input.chars().count();
 
@@ -72,6 +80,7 @@ pub fn sanitize(input: &str, policy: &SanitizePolicy) -> Result<SanitizeResult, 
             hits: Vec::new(),
             original_len,
             cleaned_len: original_len,
+            analysis: AnalysisReport::empty(),
         });
     }
 
@@ -129,38 +138,60 @@ pub fn sanitize(input: &str, policy: &SanitizePolicy) -> Result<SanitizeResult, 
         .collect();
 
     let cleaned_len = out.chars().count();
+    let analysis = analyze(input, &out, &hits, policy);
+
     Ok(SanitizeResult {
         text: out,
         hits,
         original_len,
         cleaned_len,
+        analysis,
     })
 }
 
-/// Clean text for the model: cleaned body + structured note when anything fired.
+/// Clean text for the model: cleaned body + structured note when warranted.
 pub fn model_payload(result: &SanitizeResult) -> String {
-    if result.stripped_hits().next().is_none() {
-        return result.text.clone();
-    }
-    format!(
-        "{}\n\n{}",
-        crate::note::format_model_note(result),
-        result.text
-    )
+    model_payload_with_body(result, &result.text)
 }
 
-/// Short TUI toast for security hits.
+/// Model payload using `report` for the note and `body` as authoritative text.
+///
+/// Used when paste already stripped characters (Ui) and submit re-sanitizes
+/// clean composer text — the note must still warn about the original hits /
+/// analysis.
+pub fn model_payload_with_body(report: &SanitizeResult, body: &str) -> String {
+    if !report.needs_model_note() {
+        return body.to_owned();
+    }
+    format!("{}\n\n{}", crate::note::format_model_note(report), body)
+}
+
+/// Short TUI toast for security strip hits and/or elevated analysis.
 pub fn security_toast(result: &SanitizeResult) -> Option<String> {
-    if !result.has_security_hits() {
+    let mut parts = Vec::new();
+
+    if result.has_security_hits() {
+        let n: usize = result
+            .hits
+            .iter()
+            .filter(|h| h.severity == Severity::Security)
+            .map(|h| h.count)
+            .sum();
+        parts.push(format!(
+            "Removed {n} invisible/deceptive character(s)"
+        ));
+    }
+
+    if result.analysis.should_warn() {
+        parts.push(format!(
+            "injection-risk analysis {} (score {})",
+            result.analysis.level.as_str(),
+            result.analysis.score
+        ));
+    }
+
+    if parts.is_empty() {
         return None;
     }
-    let n: usize = result
-        .hits
-        .iter()
-        .filter(|h| h.severity == Severity::Security)
-        .map(|h| h.count)
-        .sum();
-    Some(format!(
-        "Removed {n} invisible/deceptive character(s) (possible prompt injection)."
-    ))
+    Some(format!("{} — review cleaned prompt carefully.", parts.join("; ")))
 }

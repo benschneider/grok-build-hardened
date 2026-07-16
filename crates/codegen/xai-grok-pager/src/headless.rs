@@ -62,35 +62,41 @@ impl HeadlessPrompt {
     ) -> anyhow::Result<Option<Self>> {
         if let Some(text) = single {
             Self::from_text(text)
-                .map(|p| Some(p.sanitize_default()))
+                .and_then(Self::sanitize_default)
+                .map(Some)
                 .map_err(|e| anyhow::anyhow!("--single: {e}"))
         } else if let Some(json_str) = prompt_json {
             Self::from_json(json_str)
+                .and_then(Self::sanitize_default)
                 .map(Some)
                 .map_err(|e| anyhow::anyhow!("--prompt-json: {e}"))
         } else if let Some(path) = prompt_file {
-            Self::from_file(path).map(|p| Some(p.sanitize_default()))
+            Self::from_file(path)
+                .and_then(Self::sanitize_default)
+                .map(Some)
         } else {
             Ok(None)
         }
     }
 
-    /// Apply default ASCII-keyboard sanitize + model note for text prompts.
-    fn sanitize_default(self) -> Self {
+    /// Apply default ASCII-keyboard sanitize + model note.
+    /// Reject mode fails closed (error), never returns raw input.
+    fn sanitize_default(self) -> anyhow::Result<Self> {
+        let policy = xai_grok_input_sanitize::SanitizePolicy::default();
         match self {
             HeadlessPrompt::Text(raw) => {
-                let policy = xai_grok_input_sanitize::SanitizePolicy::default();
-                match xai_grok_input_sanitize::sanitize(&raw, &policy) {
-                    Ok(result) => {
-                        HeadlessPrompt::Text(xai_grok_input_sanitize::model_payload(&result))
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "headless input sanitize rejected prompt");
-                        HeadlessPrompt::Text(raw)
-                    }
-                }
+                let result = xai_grok_input_sanitize::sanitize(&raw, &policy).map_err(|e| {
+                    anyhow::anyhow!("input sanitize rejected prompt: {e}")
+                })?;
+                Ok(HeadlessPrompt::Text(xai_grok_input_sanitize::model_payload(
+                    &result,
+                )))
             }
-            other => other,
+            HeadlessPrompt::Blocks(blocks) => {
+                Ok(HeadlessPrompt::Blocks(sanitize_content_blocks(
+                    blocks, &policy,
+                )?))
+            }
         }
     }
 
@@ -126,6 +132,27 @@ impl HeadlessPrompt {
             Self::Blocks(blocks) => blocks,
         }
     }
+}
+
+/// Sanitize text fields inside ACP content blocks (images/resources untouched).
+fn sanitize_content_blocks(
+    blocks: Vec<acp::ContentBlock>,
+    policy: &xai_grok_input_sanitize::SanitizePolicy,
+) -> anyhow::Result<Vec<acp::ContentBlock>> {
+    let mut out = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        match block {
+            acp::ContentBlock::Text(mut t) => {
+                let result = xai_grok_input_sanitize::sanitize(&t.text, policy).map_err(|e| {
+                    anyhow::anyhow!("input sanitize rejected prompt block: {e}")
+                })?;
+                t.text = xai_grok_input_sanitize::model_payload(&result);
+                out.push(acp::ContentBlock::Text(t));
+            }
+            other => out.push(other),
+        }
+    }
+    Ok(out)
 }
 
 /// Parse a JSON string into ACP content blocks.
