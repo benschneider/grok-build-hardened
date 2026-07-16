@@ -1762,7 +1762,16 @@ impl SamplingClient {
     // =========================================================================
 
     /// Apply default configuration to a ConversationRequest.
+    ///
+    /// Also runs the **model-bound hard filter** on items + tool specs so
+    /// every conversation_* sampling path (primary turn, compact, classifiers,
+    /// memory, recap, …) gets the same last-hop security scrub — not only
+    /// `ChatStateActor::build_conversation_request`.
     fn apply_conversation_defaults(&self, request: &mut ConversationRequest) -> Result<()> {
+        // Egress choke: invisibles + exotic emoji on the full model-bound
+        // payload (conversation items and tool definitions / MCP descriptors).
+        *request = xai_chat_state::hard_filter_conversation_request(std::mem::take(request));
+
         if request.model.is_none() {
             request.model = Some(self.defaults.model.clone());
         }

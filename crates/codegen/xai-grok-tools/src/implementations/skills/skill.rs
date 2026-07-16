@@ -36,6 +36,23 @@ pub struct SkillOutput {
 // Old `SkillToolImpl` + `impl Tool` deleted.
 // New implementation is in `grok_build/skill/`.
 
+/// Escape text for use inside a double-quoted XML attribute.
+fn escape_xml_attr(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// Filter skill metadata destined for XML attributes.
+///
+/// Uses silent model-bound strip (no `<untrusted_content>` notes — those
+/// break attribute syntax) then escapes XML special characters so quotes
+/// and angle brackets in names/descriptions cannot break the envelope.
+fn filter_skill_attr(s: &str) -> String {
+    escape_xml_attr(&xai_grok_input_sanitize::hard_filter_model_text(s))
+}
+
 /// Build the formatted skill message shown to the model.
 ///
 /// Canonical formatter for skill content injection. Used by the skill tool
@@ -58,14 +75,16 @@ pub struct SkillOutput {
 /// preloading paths (agent definitions) — no separate instruct prefix.
 pub fn build_skill_message(skill: &SkillInfo, content: &str) -> String {
     // Skills are shared/installed markdown — untrusted even when labeled "system".
+    // Body: mid-stack untrusted filter (security Unicode + residual notes).
+    // Metadata attrs: silent hard strip + XML escape (notes break attributes).
     let content = xai_grok_input_sanitize::filter_untrusted_text(
         content,
         xai_grok_input_sanitize::UntrustedSource::Skill,
     );
-    format!(
-        "<skill name=\"{}\" description=\"{}\" path=\"{}\">\n{}\n</skill>",
-        skill.name, skill.description, skill.path, content
-    )
+    let name = filter_skill_attr(&skill.name);
+    let description = filter_skill_attr(&skill.description);
+    let path = filter_skill_attr(&skill.path);
+    format!("<skill name=\"{name}\" description=\"{description}\" path=\"{path}\">\n{content}\n</skill>")
 }
 
 /// Build a `<skill>` block for user-invoked skill expansion.
@@ -84,9 +103,11 @@ pub fn build_skill_block(name: &str, args: &str, content: &str) -> String {
         content,
         xai_grok_input_sanitize::UntrustedSource::Skill,
     );
+    let name = filter_skill_attr(name);
     if args.is_empty() {
         format!("<skill name=\"{name}\">\n{content}\n</skill>")
     } else {
+        let args = filter_skill_attr(args);
         format!("<skill name=\"{name}\" args=\"{args}\">\n{content}\n</skill>")
     }
 }
@@ -131,10 +152,9 @@ pub fn build_skill_information(skill_blocks: &[String], refs: &[SkillRef<'_>]) -
             .collect();
         out.push_str("<skills_referenced>\n");
         for r in deduped {
-            out.push_str(&format!(
-                "<skill name=\"{}\" path=\"{}\"/>\n",
-                r.name, r.path
-            ));
+            let name = filter_skill_attr(r.name);
+            let path = filter_skill_attr(r.path);
+            out.push_str(&format!("<skill name=\"{name}\" path=\"{path}\"/>\n"));
         }
         out.push_str("</skills_referenced>\n");
     }
@@ -702,9 +722,8 @@ You are helping the user create a commit.
 
     #[test]
     fn test_build_skill_message_special_chars_in_fields() {
-        // Verify that description/path containing quotes or angle brackets
-        // are inserted verbatim (no escaping) so the test breaks if we add
-        // escaping later.
+        // Quotes / angle brackets / ampersands are XML-escaped in attributes
+        // so a malicious description cannot break out of the envelope.
         let skill = SkillInfo {
             name: "deploy-v2".to_string(),
             description: "Deploy \"staging\" & <prod>".to_string(),
@@ -716,10 +735,42 @@ You are helping the user create a commit.
         let message = build_skill_message(&skill, content);
 
         let expected = "\
-<skill name=\"deploy-v2\" description=\"Deploy \"staging\" & <prod>\" path=\"/path/with spaces/SKILL.md\">
+<skill name=\"deploy-v2\" description=\"Deploy &quot;staging&quot; &amp; &lt;prod&gt;\" path=\"/path/with spaces/SKILL.md\">
 Deploy instructions.
 </skill>";
         assert_eq!(message, expected);
+    }
+
+    #[test]
+    fn test_build_skill_message_strips_zwsp_from_metadata() {
+        let skill = SkillInfo {
+            name: format!("commit\u{200B}"),
+            description: format!("Create a git commit\u{202E}"),
+            path: format!("/skills/commit\u{200B}/SKILL.md"),
+            ..SkillInfo::default()
+        };
+        let message = build_skill_message(&skill, "body\u{200B}");
+        assert!(message.contains("name=\"commit\""), "{message}");
+        assert!(
+            message.contains("description=\"Create a git commit\""),
+            "{message}"
+        );
+        assert!(
+            message.contains("path=\"/skills/commit/SKILL.md\""),
+            "{message}"
+        );
+        assert!(!message.contains('\u{200B}'), "{message}");
+        assert!(!message.contains('\u{202E}'), "{message}");
+        // Body still goes through untrusted filter (may note the strip).
+        assert!(message.contains("body"), "{message}");
+    }
+
+    #[test]
+    fn test_build_skill_block_filters_args_attr() {
+        let block = build_skill_block("commit\u{200B}", "fix\u{200B} typo", "do it");
+        assert!(block.contains("name=\"commit\""), "{block}");
+        assert!(block.contains("args=\"fix typo\""), "{block}");
+        assert!(!block.contains('\u{200B}'), "{block}");
     }
 
     #[test]

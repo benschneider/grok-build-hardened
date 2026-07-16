@@ -37,7 +37,9 @@ pub mod usage;
 
 // Re-export main types for convenience
 pub use actor::ChatStateActor;
-pub use actor::request_builder::hard_filter_conversation_items;
+pub use actor::request_builder::{
+    hard_filter_conversation_items, hard_filter_conversation_request, hard_filter_tool_specs,
+};
 pub use actor::state::{
     estimate_conversation_tokens, estimate_item_tokens, estimate_messages_tokens,
     estimate_system_message_tokens, estimate_tool_definition_tokens,

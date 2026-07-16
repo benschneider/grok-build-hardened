@@ -19,7 +19,7 @@ Grok Build is a terminal AI coding agent with a large trusted computing base:
 | Tools | `xai-grok-tools` | Shell, FS edit, web fetch/search, media, tasks |
 | Workspace / permissions | `xai-grok-workspace` | Policy, shell AST analysis, path rules (~20k LOC) |
 | Sandbox | `xai-grok-sandbox` | Landlock / Seatbelt / bwrap deny paths |
-| Extensibility | MCP, hooks, plugins, skills, marketplace | Untrusted code + network (MCP kill-switch WIP on `no-mcp` branch) |
+| Extensibility | MCP, hooks, plugins, skills, marketplace | Untrusted code + network |
 | Update | `xai-grok-update` | Auto-download and replace binary |
 | Secrets | `xai-grok-secrets` | Log/output redaction |
 
@@ -94,11 +94,6 @@ Shell analysis is unusually strong for an agent product:
 - Regex coverage for common vendor keys, PEM, Bearer, JWT, assignment forms,
   sensitive query params, home-path scrubbing
 
-### Credentials
-
-- **MCP removed entirely** in this fork (crates, runtime spawn, OAuth, CLI,
-  `search_tool`/`use_tool`). Not a kill-switch — code deleted.
-
 ### Fail-closed design notes
 
 Many security-sensitive paths already document fail-closed intent (deny glob
@@ -130,7 +125,7 @@ assuming prompt injection or a malicious page/MCP as the entry point.
 | **H-08** | **macOS child network unrestricted** | Documented. `read-only`/`strict` network story is weaker on Darwin. |
 | **H-09** | **Linux deny globs are launch-time only** | Files matching `**/.env` created after start are not covered (docs). macOS Seatbelt regex is airtight. |
 | **H-10** | **Plugin / marketplace trust** | Install path copies git/local trees into managed storage; capability depends on later skill/hook execution model. Need install-time scanning + permission boundary. |
-| **H-11** | **MCP surface** | **Mitigated:** MCP crates and runtime deleted in this fork. |
+| **H-11** | **MCP surface** | Full tool/network surface via external servers; trust and descriptor injection still open on `main`. |
 | **H-12** | **JWT `insecure_decode`** | Used for claim extraction in auth paths — ensure never used as *verification* for authorization decisions. |
 
 ### P2 — Defense in depth / process
@@ -186,7 +181,7 @@ assuming prompt injection or a malicious page/MCP as the entry point.
 
 ### Phase 3 — Extensibility audit
 
-- [x] MCP removed entirely (delete crates + call sites; see this section)
+- [ ] **H-11**: MCP trust boundary (disable/remove surface, or pin + filter descriptors)
 - [ ] Hooks: configurable fail-closed for security-critical events
 - [ ] Plugin marketplace: provenance, hash pin, capability manifest
 - [ ] Skills: no silent shell from untrusted skill content
@@ -367,9 +362,19 @@ tool-runtime ContentBlocks, agents_md load, hook deny reasons.
 
 ### Model-bound hard filter (sampling egress — security core)
 
-**Choke point:** `ChatStateActor::build_conversation_request` →
-`hard_filter_conversation_items` / `hard_filter_model_text` on system, user, assistant
-(content + tool-call args), and tool results. Stored history/UI unchanged.
+**Choke points (both apply the same transform; idempotent):**
+
+1. `ChatStateActor::build_conversation_request` → `hard_filter_conversation_request`
+2. Sampler `apply_conversation_defaults` on every `conversation_*` API call
+   (covers compact, classifiers, memory/dream/flush, recap, BTW, permission
+   classifier, and other side-channels that skip chat-state assembly)
+3. Compact ChatCompletions path also pre-filters before conversion (that path
+   does not use `ConversationRequest`)
+
+**What is scrubbed:** conversation items (system, user text, assistant content +
+tool-call **name/args**, tool results) **and** tool definitions (name, description,
+every string leaf in the JSON parameter schema — including MCP descriptors).
+Object keys in schemas are left intact. Stored history/UI unchanged.
 
 | Always strip | Keep (unless density-capped) |
 |--------------|------------------------------|
@@ -418,10 +423,3 @@ cargo test -p xai-tool-runtime --lib extract_strips
 - `crates/codegen/xai-grok-tools/src/implementations/grok_build/web_fetch/ssrf.rs`
 - `crates/codegen/xai-grok-workspace/src/permission/{manager,shell_access,policy}.rs`
 - `SECURITY.md` (upstream HackerOne)
-
----
-
-## MCP note
-
-WIP hard-disable of MCP lives on the **`no-mcp`** branch only. **`main`** still
-contains upstream MCP code. See that branch before merging MCP changes.

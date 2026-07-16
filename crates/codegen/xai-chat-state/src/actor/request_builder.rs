@@ -126,12 +126,9 @@ impl ChatStateActor {
             });
         }
 
-        // Step 4: Model-bound hard filter (invisibles + exotic emoji) on the
-        // clone that goes to sampling only — does not rewrite stored history/UI.
-        let items = hard_filter_conversation_items(items);
-
-        // Step 5: Assemble request
-        ConversationRequest {
+        // Step 4–5: Assemble request, then model-bound hard filter on the full
+        // sampling clone (items + tool specs). Stored history/UI unchanged.
+        hard_filter_conversation_request(ConversationRequest {
             items,
             tools: tool_definitions,
             hosted_tools: vec![],
@@ -150,13 +147,27 @@ impl ChatStateActor {
             trace,
             reasoning_effort: self.state.sampling_config.reasoning_effort,
             json_schema: None,
-        }
+        })
     }
 }
 
 // ============================================================================
 // Model-bound hard filter (sampling payload only)
 // ============================================================================
+
+/// Last-hop security transform for a full model-bound request.
+///
+/// Scrubs conversation items **and** tool definitions (name, description,
+/// JSON-schema string leaves). Idempotent — safe to apply again at the
+/// sampler client so side-channel `ConversationRequest`s cannot bypass
+/// [`ChatStateActor::build_conversation_request`].
+pub fn hard_filter_conversation_request(
+    mut request: ConversationRequest,
+) -> ConversationRequest {
+    request.items = hard_filter_conversation_items(request.items);
+    request.tools = hard_filter_tool_specs(request.tools);
+    request
+}
 
 /// Strip invisible Unicode and **exotic** emoji from every text field that
 /// will be sent to the model. Basic smileys are kept. Images untouched.
@@ -184,6 +195,7 @@ pub fn hard_filter_conversation_items(
             ConversationItem::Assistant(asst) => {
                 asst.content = Arc::from(hard_filter_model_text(asst.content.as_ref()));
                 for tc in &mut asst.tool_calls {
+                    tc.name = hard_filter_model_text(&tc.name);
                     tc.arguments =
                         Arc::from(hard_filter_model_text(tc.arguments.as_ref()));
                 }
@@ -203,6 +215,52 @@ pub fn hard_filter_conversation_items(
         }
     }
     items
+}
+
+/// Hard-filter tool definitions that ride on every agent turn (including MCP).
+///
+/// Name, description, and every string leaf in the parameter schema are
+/// scrubbed. Object **keys** are left alone so JSON Schema structure
+/// (`properties`, `required`, …) still matches the wire format tools expect.
+pub fn hard_filter_tool_specs(mut tools: Vec<ToolSpec>) -> Vec<ToolSpec> {
+    use xai_grok_input_sanitize::hard_filter_model_text;
+
+    for tool in &mut tools {
+        tool.name = hard_filter_model_text(&tool.name);
+        if let Some(desc) = tool.description.take() {
+            let cleaned = hard_filter_model_text(&desc);
+            tool.description = if cleaned.is_empty() {
+                None
+            } else {
+                Some(cleaned)
+            };
+        }
+        hard_filter_json_strings(&mut tool.parameters);
+    }
+    tools
+}
+
+fn hard_filter_json_strings(value: &mut serde_json::Value) {
+    use xai_grok_input_sanitize::hard_filter_model_text;
+
+    match value {
+        serde_json::Value::String(s) => {
+            *s = hard_filter_model_text(s);
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                hard_filter_json_strings(item);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for (_key, child) in map.iter_mut() {
+                hard_filter_json_strings(child);
+            }
+        }
+        serde_json::Value::Null
+        | serde_json::Value::Bool(_)
+        | serde_json::Value::Number(_) => {}
+    }
 }
 
 // ============================================================================
@@ -610,6 +668,58 @@ mod tests {
             assert!(!t.content.as_ref().contains('\u{202E}'), "{}", t.content);
             assert!(t.content.as_ref().starts_with("out"), "{}", t.content);
         }
+    }
+
+    #[test]
+    fn model_bound_hard_filters_tool_specs_including_schema_strings() {
+        let tools = hard_filter_tool_specs(vec![ToolSpec {
+            name: format!("bash\u{200B}"),
+            description: Some(format!("Run shell\u{202E} \u{1FAE0}")),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "cmd": {
+                        "type": "string",
+                        "description": "command\u{200B} with \u{1F1FA}\u{1F1F8}"
+                    }
+                },
+                "required": ["cmd"]
+            }),
+        }]);
+        assert_eq!(tools[0].name, "bash");
+        let desc = tools[0].description.as_deref().unwrap_or("");
+        assert!(!desc.contains('\u{202E}'), "{desc}");
+        assert!(!desc.contains('\u{1FAE0}'), "{desc}");
+        assert!(desc.contains("Run shell"), "{desc}");
+        let cmd_desc = tools[0].parameters["properties"]["cmd"]["description"]
+            .as_str()
+            .unwrap();
+        assert!(!cmd_desc.contains('\u{200B}'), "{cmd_desc}");
+        assert!(!cmd_desc.contains('\u{1F1FA}'), "{cmd_desc}");
+        assert!(cmd_desc.contains("command"), "{cmd_desc}");
+        // Schema structure keys preserved.
+        assert_eq!(tools[0].parameters["required"][0], "cmd");
+    }
+
+    #[test]
+    fn hard_filter_conversation_request_covers_items_and_tools() {
+        let req = hard_filter_conversation_request(ConversationRequest {
+            items: vec![ConversationItem::user("hi\u{200B}")],
+            tools: vec![ToolSpec {
+                name: "t\u{200B}".into(),
+                description: Some("d\u{200B}".into()),
+                parameters: serde_json::json!({}),
+            }],
+            ..Default::default()
+        });
+        if let ConversationItem::User(u) = &req.items[0] {
+            let ContentPart::Text { text } = &u.content[0] else {
+                panic!("text");
+            };
+            assert_eq!(text.as_ref(), "hi");
+        }
+        assert_eq!(req.tools[0].name, "t");
+        assert_eq!(req.tools[0].description.as_deref(), Some("d"));
     }
 
     #[test]

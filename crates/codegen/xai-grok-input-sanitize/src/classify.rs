@@ -1,7 +1,7 @@
 //! Character classification into risk categories.
 
 use crate::category::RiskCategory;
-use crate::policy::{CategoryAction, SanitizePolicy};
+use crate::policy::SanitizePolicy;
 
 /// Base allowlist: printable ASCII + LF (CR normalized before classify).
 #[inline]
@@ -10,7 +10,7 @@ pub fn is_base_allowed(c: char) -> bool {
 }
 
 /// Classify a non-base character. Order: specific buckets before generic letter/punct.
-pub fn classify(c: char, policy: &SanitizePolicy) -> RiskCategory {
+pub fn classify(c: char, _policy: &SanitizePolicy) -> RiskCategory {
     let cp = c as u32;
 
     if c == '\t' {
@@ -38,10 +38,13 @@ pub fn classify(c: char, policy: &SanitizePolicy) -> RiskCategory {
     }
 
     // VS16 (emoji presentation) rides with emoji keep; VS1–15 are security.
-    if is_emoji_codepoint(cp)
-        || cp == 0xFE0F
-        || (cp == 0x200D && policy.action(RiskCategory::Emoji) == CategoryAction::Keep)
-    {
+    //
+    // ZWJ (U+200D) is intentionally **not** promoted to Emoji when emoji is
+    // Keep: letter-interleaved ZWJ is a classic stego channel, and treating it
+    // as emoji let `KEY‍MESSAGE` survive mid-stack untrusted filters. Multi-
+    // person emoji sequences lose their joiners (acceptable; model-bound also
+    // strips ZWJ as exotic chrome). ZWJ falls through to zero_width_format.
+    if is_emoji_codepoint(cp) || cp == 0xFE0F {
         return RiskCategory::Emoji;
     }
 

@@ -13548,6 +13548,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
+ "xai-chat-state",
  "xai-grok-sampling-types",
  "xai-grok-test-support",
  "xai-grok-version",

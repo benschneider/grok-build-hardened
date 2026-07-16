@@ -357,6 +357,11 @@ pub(crate) async fn generate_session_compact(
     idle_timeout: std::time::Duration,
     wall_clock_budget_secs: u64,
 ) -> Result<CompactOutput, CompactFailure> {
+    // ChatCompletions compact converts to ChatCompletionRequest and bypasses
+    // ConversationRequest defaults — scrub items + tools here so this path
+    // matches the model-bound egress used by Responses/Messages (and sampler).
+    let chat_history = xai_chat_state::hard_filter_conversation_items(chat_history);
+    let tools = xai_chat_state::hard_filter_tool_specs(tools);
     let num_messages = chat_history.len();
     let output = match sampling_config.api_backend {
         ApiBackend::ChatCompletions => {

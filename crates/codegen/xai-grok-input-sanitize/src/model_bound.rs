@@ -70,8 +70,9 @@ pub fn is_exotic_emoji(c: char) -> bool {
     let cp = c as u32;
     matches!(
         cp,
-        // ZWJ — joins multi-person/profession sequences (token-heavy); when
-        // emoji is kept, classify treats ZWJ as Emoji so we must strip here.
+        // ZWJ — multi-person emoji joiner; also stripped as security in
+        // classify (zero_width). Kept here as defense-in-depth for density /
+        // exotic chrome filtering if policy ever reclassifies it.
         0x200D
             // Emoji presentation selector (multi-unit glyphs)
             | 0xFE0F
