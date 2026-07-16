@@ -257,11 +257,12 @@ Update ─────── x.ai/cli + GCS ──► replace binary
 
 ## 9. Input sanitize (ASCII keyboard default)
 
-**Status:** engine + modular pager adapter wired (paste/submit/interject/send-now/bash/
-headless text+JSON + slash passthrough). Pending paste strip report re-attaches model
-notes on submit. Residual-risk **analysis** (statistical / steganographic / phrase
-heuristics) runs after the mechanical pass. Permanent config write for `--user`/`--project`
-still TBD (session allow works).
+**Status:** engine + modular pager adapter fully wired for adversarial testing:
+
+- Paste / submit / interject / bash / headless text+JSON
+- Model notes + security toast + residual-risk analysis
+- `/input-allow` / `/input-deny` / status (session + **user/project config.toml**)
+- Base policy loaded from `[input_sanitize]` at agent creation
 
 ### Goal
 
@@ -332,23 +333,37 @@ Actions: `strip` | `keep` | `reject`.
 
 Score 0–100 → level none/low/medium/high/critical. Medium+ attaches model note + toast.
 
-### Config sketch (not yet wired)
+### Config (wired)
 
 ```toml
+# ~/.grok/config.toml or <project>/.grok/config.toml
 [input_sanitize]
 enabled = true
 notify_when_stripped = true
 analyze = true
-tab = "strip"
-latin_extended = "strip"
-emoji = "strip"
-# … all categories default strip
+latin_extended = "keep"   # example opt-in
 ```
 
-### Crate
+```text
+/input-allow latin_extended --session
+/input-allow unicode_letters --user
+/input-allow tab --project
+/input-deny emoji
+/input-allow status
+```
 
-- `crates/codegen/xai-grok-input-sanitize` — `sanitize()` + `analyze` + `format_model_note()`
-- Tests: `cargo test -p xai-grok-input-sanitize`
+### Modules
+
+| Path | Role |
+|------|------|
+| `xai-grok-input-sanitize` | Pure engine (classify, sanitize, analyze, note, config) |
+| `pager/src/input_sanitize/` | Session overlay, apply, **persist** |
+| `pager/.../input_allow.rs` | Slash commands |
+| `tests/adversarial.rs` | Adversarial goldens |
+
+```bash
+cargo test -p xai-grok-input-sanitize
+```
 
 ---
 
@@ -359,6 +374,7 @@ emoji = "strip"
 | 2026-07-15 | Phase 0: DNS-pin SSRF, expanded dangerous commands, `deny.toml`, sandbox example |
 | 2026-07-16 | Phase 1 input sanitize: `xai-grok-input-sanitize` engine (ASCII default + categories) |
 | 2026-07-16 | Modular wire-up: paste/submit/headless sanitize, model note, `/input-allow` session |
+| 2026-07-16 | Residual analysis + closed ingresses; config load/persist for `--user`/`--project` |
 | 2026-07-16 | Adversarial harden: pending paste notes, interject/bash/JSON gates, filler→security, fail-closed headless reject |
 | 2026-07-16 | Residual-risk analysis: statistical/stego/phrase signals on cleaned text + strip transform |
 

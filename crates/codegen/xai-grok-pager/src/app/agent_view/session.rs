@@ -58,11 +58,12 @@ impl AgentView {
     /// The prompt widget is initialized with the session's working directory.
     pub fn new(session: AgentSession, scrollback: ScrollbackState) -> Self {
         let prompt = PromptWidget::new_with_cwd(&session.cwd);
+        let base_policy = crate::input_sanitize::load_policy(Some(session.cwd.as_path()));
         let mut view = Self {
             session,
             scrollback,
             prompt,
-            input_sanitize: crate::input_sanitize::InputSanitizeSession::default(),
+            input_sanitize: crate::input_sanitize::InputSanitizeSession::new(base_policy),
             tip_typing_dismissed: false,
             todo: TodoPane::new(),
             tasks: TasksPane::new(),

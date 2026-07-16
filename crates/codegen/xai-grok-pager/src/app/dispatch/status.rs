@@ -84,8 +84,7 @@ pub(super) fn dispatch_input_sanitize_status(app: &mut AppView) -> Vec<Effect> {
     vec![]
 }
 
-/// Allow capability categories for the session (config write scopes deferred to
-/// session-only keep for now; permanent scopes show a toast).
+/// Allow capability categories for session and optionally persist to config.
 pub(super) fn dispatch_input_sanitize_allow(
     app: &mut AppView,
     categories: &[String],
@@ -97,6 +96,7 @@ pub(super) fn dispatch_input_sanitize_allow(
         app.show_toast("No active agent");
         return vec![];
     };
+    let cwd = app.agents.get(&id).map(|a| a.session.cwd.clone());
     let Some(agent) = app.agents.get_mut(&id) else {
         return vec![];
     };
@@ -108,19 +108,35 @@ pub(super) fn dispatch_input_sanitize_allow(
             continue;
         };
         match agent.input_sanitize.allow_session(cat) {
-            Ok(()) => ok.push(cat.as_str().to_string()),
+            Ok(()) => {
+                if user_config || project_config {
+                    if let Err(e) = crate::input_sanitize::persist_allow(
+                        cat,
+                        user_config,
+                        project_config,
+                        cwd.as_deref(),
+                    ) {
+                        err.push(format!("{}: {e}", cat.as_str()));
+                        continue;
+                    }
+                    // Refresh base so new agents / status reflect disk.
+                    agent
+                        .input_sanitize
+                        .set_base(crate::input_sanitize::load_policy(cwd.as_deref()));
+                    // Re-apply session keep on top of reloaded base.
+                    let _ = agent.input_sanitize.allow_session(cat);
+                }
+                ok.push(cat.as_str().to_string());
+            }
             Err(e) => err.push(e.to_string()),
         }
     }
     if !ok.is_empty() {
-        let scope = if user_config {
-            "user (session applied; permanent write TBD)"
-        } else if project_config {
-            "project (session applied; permanent write TBD)"
-        } else if session_only {
-            "session"
-        } else {
-            "session"
+        let scope = match (session_only, user_config, project_config) {
+            (_, true, true) => "user+project",
+            (_, true, false) => "user",
+            (_, false, true) => "project",
+            _ => "session",
         };
         agent.show_toast(&format!("Allowed {} ({scope})", ok.join(", ")));
     }
@@ -138,6 +154,7 @@ pub(super) fn dispatch_input_sanitize_deny(
         app.show_toast("No active agent");
         return vec![];
     };
+    let cwd = app.agents.get(&id).map(|a| a.session.cwd.clone());
     let Some(agent) = app.agents.get_mut(&id) else {
         return vec![];
     };
@@ -147,6 +164,8 @@ pub(super) fn dispatch_input_sanitize_deny(
             continue;
         };
         agent.input_sanitize.deny_session(cat);
+        // Also strip from user config when present (best-effort permanent deny).
+        let _ = crate::input_sanitize::persist_deny(cat, true, false, cwd.as_deref());
         ok.push(cat.as_str().to_string());
     }
     if !ok.is_empty() {
