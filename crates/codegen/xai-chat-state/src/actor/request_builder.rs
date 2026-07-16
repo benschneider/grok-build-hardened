@@ -1,5 +1,7 @@
 //! ConversationRequest assembly — image compaction, pruning, repair, memory injection.
 
+use std::sync::Arc;
+
 use xai_grok_sampling_types::{
     ContentPart, ConversationItem, ConversationRequest, ToolSpec, TraceContext,
 };
@@ -124,7 +126,11 @@ impl ChatStateActor {
             });
         }
 
-        // Step 4: Assemble request
+        // Step 4: Model-bound hard filter (invisibles + exotic emoji) on the
+        // clone that goes to sampling only — does not rewrite stored history/UI.
+        let items = hard_filter_conversation_items(items);
+
+        // Step 5: Assemble request
         ConversationRequest {
             items,
             tools: tool_definitions,
@@ -146,6 +152,54 @@ impl ChatStateActor {
             json_schema: None,
         }
     }
+}
+
+// ============================================================================
+// Model-bound hard filter (sampling payload only)
+// ============================================================================
+
+/// Strip invisible Unicode and **exotic** emoji from every text field that
+/// will be sent to the model. Basic smileys are kept. Images untouched.
+fn hard_filter_conversation_items(
+    mut items: Vec<ConversationItem>,
+) -> Vec<ConversationItem> {
+    use xai_grok_input_sanitize::hard_filter_model_text;
+    use xai_grok_sampling_types::ContentPart;
+
+    for item in &mut items {
+        match item {
+            ConversationItem::System(sys) => {
+                sys.content = Arc::from(hard_filter_model_text(sys.content.as_ref()));
+            }
+            ConversationItem::User(user) => {
+                for part in &mut user.content {
+                    if let ContentPart::Text { text } = part {
+                        *text = Arc::from(hard_filter_model_text(text.as_ref()));
+                    }
+                }
+            }
+            ConversationItem::Assistant(asst) => {
+                asst.content = Arc::from(hard_filter_model_text(asst.content.as_ref()));
+                for tc in &mut asst.tool_calls {
+                    tc.arguments =
+                        Arc::from(hard_filter_model_text(tc.arguments.as_ref()));
+                }
+            }
+            ConversationItem::ToolResult(tr) => {
+                tr.content = Arc::from(hard_filter_model_text(tr.content.as_ref()));
+                for part in &mut tr.images {
+                    if let ContentPart::Text { text } = part {
+                        *text = Arc::from(hard_filter_model_text(text.as_ref()));
+                    }
+                }
+            }
+            // Backend tool / reasoning blobs are server-authored or opaque;
+            // still scrub any embedded display text if present via Debug? Skip
+            // opaque wire types — filtering wrong fields can break API round-trip.
+            ConversationItem::BackendToolCall(_) | ConversationItem::Reasoning(_) => {}
+        }
+    }
+    items
 }
 
 // ============================================================================
@@ -524,6 +578,36 @@ fn safe_char_slice_tail(s: &str, count: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use xai_grok_sampling_types::ContentPart;
+
+    #[test]
+    fn model_bound_hard_filter_strips_zwsp_and_exotic_keeps_basic_emoji() {
+        let items = hard_filter_conversation_items(vec![
+            ConversationItem::system("sys\u{200B} 😀"),
+            // 🫠 U+1FAE0 supplemental (exotic); 👋 U+1F44B basic pictograph (keep)
+            ConversationItem::user("hi 👋 \u{1FAE0}\u{200B}"),
+            // Flag regional indicators (exotic) + bidi
+            ConversationItem::tool_result("c1", "out \u{1F1FA}\u{1F1F8}\u{202E}"),
+        ]);
+        if let ConversationItem::System(s) = &items[0] {
+            assert_eq!(s.content.as_ref(), "sys 😀");
+        } else {
+            panic!("expected system");
+        }
+        if let ConversationItem::User(u) = &items[1] {
+            let ContentPart::Text { text } = &u.content[0] else {
+                panic!("text");
+            };
+            assert!(text.as_ref().contains('👋'), "{text}");
+            assert!(!text.as_ref().contains('\u{1FAE0}'), "{text}");
+            assert!(!text.as_ref().contains('\u{200B}'), "{text}");
+        }
+        if let ConversationItem::ToolResult(t) = &items[2] {
+            assert!(!t.content.as_ref().contains('\u{1F1FA}'), "{}", t.content);
+            assert!(!t.content.as_ref().contains('\u{202E}'), "{}", t.content);
+            assert!(t.content.as_ref().starts_with("out"), "{}", t.content);
+        }
+    }
 
     #[test]
     fn should_prune_gating() {

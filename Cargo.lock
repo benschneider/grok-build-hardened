@@ -12751,6 +12751,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "xai-grok-compaction",
+ "xai-grok-input-sanitize",
  "xai-grok-sampling-types",
  "xai-token-estimation",
 ]

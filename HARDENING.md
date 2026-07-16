@@ -386,6 +386,21 @@ with `<untrusted_content source="…">` so the model does not treat tool text as
 Shared/installed skills and system prompts are **not** trusted by label —
 they are filtered the same as file/web content.
 
+### Model-bound hard filter (sampling egress)
+
+**Choke point:** `ChatStateActor::build_conversation_request` — last clone of
+conversation items before the sampling API.
+
+**Silent hard strip** via `SanitizePolicy::model_bound` / `hard_filter_model_text`:
+
+| Always strip | Keep |
+|--------------|------|
+| Invisibles / bidi / lookalikes / controls / fillers | Languages, punctuation, tabs |
+| **Exotic emoji chrome** (flags/RI, skin tones, VS-16, keycap, U+1F900–1FAFF supplemental, cards/mahjong, …) | Basic faces/symbols (😀 👍 ✅ 🎉 …), real code/docs |
+
+Does **not** rewrite stored history or the TUI — only the model-bound payload.
+No analysis notes at this edge (notes would waste tokens).
+
 ### Modules
 
 | Path | Role |

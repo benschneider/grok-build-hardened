@@ -91,6 +91,22 @@ impl SanitizePolicy {
         p
     }
 
+    /// **Model-bound hard filter** applied to the sampling payload (last hop).
+    ///
+    /// - Strips all **security** Unicode (invisibles, bidi, lookalikes, …)
+    /// - Keeps languages / punctuation / tabs / basic emoji (😀 👍 …)
+    /// - Exotic emoji chrome is stripped in [`crate::hard_filter_model_text`]
+    ///   (flags, skin tones, supplemental blocks, VS-16, …) — token stuffing
+    /// - **No** residual analysis notes (silent — notes would burn tokens too)
+    pub fn model_bound() -> Self {
+        let mut p = Self::untrusted_external();
+        // Keep the Emoji *category* so basic smileys survive; exotic codepoints
+        // are removed by `hard_filter_model_text` / `is_exotic_emoji`.
+        p.analyze_enabled = false;
+        p.notify_when_stripped = false;
+        p
+    }
+
     pub fn action(&self, cat: RiskCategory) -> CategoryAction {
         self.actions
             .get(&cat)

@@ -12,6 +12,7 @@
 //! | [`analyze_image`] | Statistical / container checks on image bytes |
 //! | [`note`] | Model-facing `<input_sanitize>` / `<untrusted_content>` notes |
 //! | [`untrusted`] | External content policy (MCP/files/web/shell/skills/…) |
+//! | [`model_bound`] | Silent hard strip (invisibles + emoji) at sampling edge |
 //! | [`config`] | Serde `[input_sanitize]` table → policy |
 //!
 //! # Policies
@@ -19,6 +20,7 @@
 //! - **Terminal (default):** printable ASCII only + residual analysis.
 //! - **Untrusted external:** keep languages/emoji; strip security Unicode +
 //!   residual analysis. Used for tool/MCP/file/web streams into the model.
+//! - **Model-bound:** silent hard strip of invisibles + emoji on the API payload.
 //!
 //! See root `HARDENING.md`.
 
@@ -27,6 +29,7 @@ mod analyze_image;
 mod category;
 mod classify;
 mod config;
+mod model_bound;
 mod note;
 mod policy;
 mod sanitize;
@@ -47,6 +50,7 @@ pub use sanitize::{
     model_payload, model_payload_with_body, sanitize, security_toast, CategoryHit, SanitizeError,
     SanitizeResult,
 };
+pub use model_bound::hard_filter_model_text;
 pub use untrusted::{
     filter_untrusted_text, sanitize_untrusted, untrusted_model_payload, UntrustedSource,
 };
