@@ -71,6 +71,90 @@ pub(super) fn dispatch_show_session_info(app: &mut AppView) -> Vec<Effect> {
 /// Three-state display: Enterprise ZDR, coding data sharing opted out,
 /// or opted in. Labels align with `CODING_DATA_SHARING_CHOICES` in
 /// `settings/defs.rs` and the `coding_data_sharing_toast` format.
+/// Show active input-sanitize policy (slash `/input-allow status`).
+pub(super) fn dispatch_input_sanitize_status(app: &mut AppView) -> Vec<Effect> {
+    let ActiveView::Agent(id) = app.active_view else {
+        app.show_toast("No active agent");
+        return vec![];
+    };
+    let Some(agent) = app.agents.get(&id) else {
+        return vec![];
+    };
+    push_system_to_any_agent(app, &agent.input_sanitize.status_text());
+    vec![]
+}
+
+/// Allow capability categories for the session (config write scopes deferred to
+/// session-only keep for now; permanent scopes show a toast).
+pub(super) fn dispatch_input_sanitize_allow(
+    app: &mut AppView,
+    categories: &[String],
+    session_only: bool,
+    user_config: bool,
+    project_config: bool,
+) -> Vec<Effect> {
+    let ActiveView::Agent(id) = app.active_view else {
+        app.show_toast("No active agent");
+        return vec![];
+    };
+    let Some(agent) = app.agents.get_mut(&id) else {
+        return vec![];
+    };
+    let mut ok = Vec::new();
+    let mut err = Vec::new();
+    for name in categories {
+        let Some(cat) = xai_grok_input_sanitize::RiskCategory::parse(name) else {
+            err.push(format!("unknown:{name}"));
+            continue;
+        };
+        match agent.input_sanitize.allow_session(cat) {
+            Ok(()) => ok.push(cat.as_str().to_string()),
+            Err(e) => err.push(e.to_string()),
+        }
+    }
+    if !ok.is_empty() {
+        let scope = if user_config {
+            "user (session applied; permanent write TBD)"
+        } else if project_config {
+            "project (session applied; permanent write TBD)"
+        } else if session_only {
+            "session"
+        } else {
+            "session"
+        };
+        agent.show_toast(&format!("Allowed {} ({scope})", ok.join(", ")));
+    }
+    if !err.is_empty() {
+        agent.show_toast(&err.join("; "));
+    }
+    vec![]
+}
+
+pub(super) fn dispatch_input_sanitize_deny(
+    app: &mut AppView,
+    categories: &[String],
+) -> Vec<Effect> {
+    let ActiveView::Agent(id) = app.active_view else {
+        app.show_toast("No active agent");
+        return vec![];
+    };
+    let Some(agent) = app.agents.get_mut(&id) else {
+        return vec![];
+    };
+    let mut ok = Vec::new();
+    for name in categories {
+        let Some(cat) = xai_grok_input_sanitize::RiskCategory::parse(name) else {
+            continue;
+        };
+        agent.input_sanitize.deny_session(cat);
+        ok.push(cat.as_str().to_string());
+    }
+    if !ok.is_empty() {
+        agent.show_toast(&format!("Denied {}", ok.join(", ")));
+    }
+    vec![]
+}
+
 pub(super) fn dispatch_show_privacy_info(app: &mut AppView) -> Vec<Effect> {
     let mut lines = Vec::new();
 

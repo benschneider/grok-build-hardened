@@ -257,7 +257,8 @@ Update ─────── x.ai/cli + GCS ──► replace binary
 
 ## 9. Input sanitize (ASCII keyboard default)
 
-**Status:** engine landed in `xai-grok-input-sanitize`; TUI/config/slash wiring TBD.
+**Status:** engine + modular pager adapter wired (paste/submit/headless + slash).
+Permanent config write for `--user`/`--project` still TBD (session allow works).
 
 ### Goal
 
@@ -329,6 +330,7 @@ emoji = "strip"
 |------|--------|
 | 2026-07-15 | Phase 0: DNS-pin SSRF, expanded dangerous commands, `deny.toml`, sandbox example |
 | 2026-07-16 | Phase 1 input sanitize: `xai-grok-input-sanitize` engine (ASCII default + categories) |
+| 2026-07-16 | Modular wire-up: paste/submit/headless sanitize, model note, `/input-allow` session |
 
 ---
 

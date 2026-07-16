@@ -695,6 +695,19 @@ pub enum Action {
     SetCodingDataSharing {
         opted_in: bool,
     },
+    /// Show active input-sanitize policy + last report.
+    InputSanitizeStatus,
+    /// Allow capability categories (session and/or config scopes).
+    InputSanitizeAllow {
+        categories: Vec<String>,
+        session_only: bool,
+        user_config: bool,
+        project_config: bool,
+    },
+    /// Revoke session (and base) keep for categories.
+    InputSanitizeDeny {
+        categories: Vec<String>,
+    },
     /// `/fork` slash command: parsed args produced by
     /// [`crate::slash::commands::fork::parse_fork_args`]. The dispatcher
     /// resolves the worktree question (via flag or the local

@@ -315,6 +315,36 @@ pub(super) fn dispatch_send_prompt_inner(
         return vec![];
     }
 
+    // Authoritative sanitize at submit (covers typed Unicode, not only paste).
+    // Slash commands pass through without model notes.
+    let text = {
+        let trimmed_check = text.trim();
+        let is_slash = !literal && trimmed_check.starts_with('/');
+        if is_slash {
+            text
+        } else if let ActiveView::Agent(id) = app.active_view {
+            if let Some(agent) = app.agents.get_mut(&id) {
+                use crate::input_sanitize::{ApplyKind, AppliedInput};
+                match AppliedInput::apply(&mut agent.input_sanitize, &text, ApplyKind::Send) {
+                    Ok(applied) => {
+                        if let Some(ref toast) = applied.toast {
+                            agent.show_toast(toast);
+                        }
+                        applied.model_text
+                    }
+                    Err(e) => {
+                        agent.show_toast(&e.to_string());
+                        return vec![];
+                    }
+                }
+            } else {
+                text
+            }
+        } else {
+            text
+        }
+    };
+
     // The picker intercepts only real, user-authored prompts; slash commands,
     // exit aliases, empty input, and literal chip submissions pass through so
     // they never spawn it (a chip is a model suggestion for an already-running

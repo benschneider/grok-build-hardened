@@ -62,16 +62,35 @@ impl HeadlessPrompt {
     ) -> anyhow::Result<Option<Self>> {
         if let Some(text) = single {
             Self::from_text(text)
-                .map(Some)
+                .map(|p| Some(p.sanitize_default()))
                 .map_err(|e| anyhow::anyhow!("--single: {e}"))
         } else if let Some(json_str) = prompt_json {
             Self::from_json(json_str)
                 .map(Some)
                 .map_err(|e| anyhow::anyhow!("--prompt-json: {e}"))
         } else if let Some(path) = prompt_file {
-            Self::from_file(path).map(Some)
+            Self::from_file(path).map(|p| Some(p.sanitize_default()))
         } else {
             Ok(None)
+        }
+    }
+
+    /// Apply default ASCII-keyboard sanitize + model note for text prompts.
+    fn sanitize_default(self) -> Self {
+        match self {
+            HeadlessPrompt::Text(raw) => {
+                let policy = xai_grok_input_sanitize::SanitizePolicy::default();
+                match xai_grok_input_sanitize::sanitize(&raw, &policy) {
+                    Ok(result) => {
+                        HeadlessPrompt::Text(xai_grok_input_sanitize::model_payload(&result))
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "headless input sanitize rejected prompt");
+                        HeadlessPrompt::Text(raw)
+                    }
+                }
+            }
+            other => other,
         }
     }
 

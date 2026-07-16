@@ -35,12 +35,25 @@ impl AgentView {
         activate_bash: bool,
     ) -> (InputOutcome, crate::app::actions::ClipboardTextInsertion) {
         use crate::app::actions::ClipboardTextInsertion;
+        use crate::input_sanitize::{ApplyKind, AppliedInput};
         let Some(text) = clipboard_text else {
             return (InputOutcome::Changed, ClipboardTextInsertion::Empty);
         };
         if text.trim().is_empty() {
             return (InputOutcome::Unchanged, ClipboardTextInsertion::Empty);
         }
+        // Sanitize before the composer sees the paste (WYSIWYG = what will be sent).
+        let applied = match AppliedInput::apply(&mut self.input_sanitize, text, ApplyKind::Ui) {
+            Ok(a) => a,
+            Err(e) => {
+                self.show_toast(&e.to_string());
+                return (InputOutcome::Changed, ClipboardTextInsertion::Failed);
+            }
+        };
+        if let Some(ref toast) = applied.toast {
+            self.show_toast(toast);
+        }
+        let text = applied.display_text.as_str();
         let paste_text = if activate_bash
             && self.prompt_input_mode == super::PromptInputMode::Normal
             && self.prompt.text().is_empty()

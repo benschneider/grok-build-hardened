@@ -92,7 +92,8 @@ use super::settings::ui::{
     dispatch_toggle_vim_mode,
 };
 use super::status::{
-    dispatch_copy_session_id, dispatch_open_gboom, dispatch_share_session,
+    dispatch_copy_session_id, dispatch_input_sanitize_allow, dispatch_input_sanitize_deny,
+    dispatch_input_sanitize_status, dispatch_open_gboom, dispatch_share_session,
     dispatch_show_context_info, dispatch_show_privacy_info, dispatch_show_queue,
     dispatch_show_release_notes, dispatch_show_session_info, dispatch_show_tasks,
     dispatch_show_usage, set_coding_data_sharing,
@@ -894,6 +895,22 @@ pub(crate) fn dispatch(action: Action, app: &mut AppView) -> Vec<Effect> {
         Action::SendRecap { auto } => dispatch_send_recap(app, auto),
         Action::ShowPrivacyInfo => dispatch_show_privacy_info(app),
         Action::SetCodingDataSharing { opted_in } => set_coding_data_sharing(app, opted_in),
+        Action::InputSanitizeStatus => dispatch_input_sanitize_status(app),
+        Action::InputSanitizeAllow {
+            categories,
+            session_only,
+            user_config,
+            project_config,
+        } => dispatch_input_sanitize_allow(
+            app,
+            &categories,
+            session_only,
+            user_config,
+            project_config,
+        ),
+        Action::InputSanitizeDeny { categories } => {
+            dispatch_input_sanitize_deny(app, &categories)
+        },
         Action::ToggleYolo => dispatch_toggle_yolo(app),
         Action::ToggleMultiline => dispatch_toggle_multiline(app),
         Action::ToggleCompactMode => dispatch_toggle_compact_mode(app),

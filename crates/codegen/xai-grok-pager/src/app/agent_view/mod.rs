@@ -707,6 +707,8 @@ pub struct AgentView {
     pub session: AgentSession,
     pub scrollback: ScrollbackState,
     pub prompt: PromptWidget,
+    /// ASCII-keyboard input sanitize policy + last report (modular adapter).
+    pub input_sanitize: crate::input_sanitize::InputSanitizeSession,
     /// Sticky: once the user types in the prompt, hide the tip for the session.
     pub tip_typing_dismissed: bool,
     pub todo: TodoPane,

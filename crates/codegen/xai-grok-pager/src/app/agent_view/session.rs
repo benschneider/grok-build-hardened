@@ -62,6 +62,7 @@ impl AgentView {
             session,
             scrollback,
             prompt,
+            input_sanitize: crate::input_sanitize::InputSanitizeSession::default(),
             tip_typing_dismissed: false,
             todo: TodoPane::new(),
             tasks: TasksPane::new(),

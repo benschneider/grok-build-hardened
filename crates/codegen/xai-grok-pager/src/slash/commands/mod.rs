@@ -31,6 +31,7 @@ pub mod home;
 pub mod imagine;
 pub mod imagine_video;
 pub mod import_claude;
+pub mod input_allow;
 pub mod login;
 pub mod logout;
 pub mod loop_cmd;
@@ -125,6 +126,8 @@ pub fn builtin_commands() -> Vec<Arc<dyn SlashCommand>> {
         Arc::new(toggle_mouse_reporting::ToggleMouseReportingCommand),
         Arc::new(settings_cmd::SettingsCommand),
         Arc::new(privacy::PrivacyCommand),
+        Arc::new(input_allow::InputAllowCommand),
+        Arc::new(input_allow::InputDenyCommand),
         Arc::new(rewind::RewindCommand),
         Arc::new(login::LoginCommand),
         Arc::new(logout::LogoutCommand),
