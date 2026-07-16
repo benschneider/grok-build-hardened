@@ -1,0 +1,13 @@
+[package]
+license = "Apache-2.0"
+name = "xai-grok-input-sanitize"
+version = "0.1.0"
+edition.workspace = true
+description = "ASCII-keyboard default input sanitizer with opt-in Unicode category extensions."
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

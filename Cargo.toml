@@ -64,6 +64,7 @@ members = [
     "crates/codegen/xai-sqlite-journal",
     "crates/codegen/xai-system-power",
     "crates/codegen/xai-token-estimation",
+    "crates/codegen/xai-grok-input-sanitize",
     "crates/codegen/xai-tracing-macros",
     "crates/codegen/xai-tty-utils",
     "crates/common/xai-circuit-breaker",
@@ -313,6 +314,7 @@ xai-sqlite-journal = { path = "crates/codegen/xai-sqlite-journal" }
 xai-system-power = { path = "crates/codegen/xai-system-power" }
 xai-test-utils = { path = "crates/common/xai-test-utils" }
 xai-token-estimation = { path = "crates/codegen/xai-token-estimation" }
+xai-grok-input-sanitize = { path = "crates/codegen/xai-grok-input-sanitize" }
 xai-tool-protocol = { path = "crates/common/xai-tool-protocol" }
 xai-tool-runtime = { path = "crates/common/xai-tool-runtime" }
 xai-tool-types = { path = "crates/common/xai-tool-types" }

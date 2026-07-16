@@ -19,7 +19,7 @@ Grok Build is a terminal AI coding agent with a large trusted computing base:
 | Tools | `xai-grok-tools` | Shell, FS edit, web fetch/search, media, tasks |
 | Workspace / permissions | `xai-grok-workspace` | Policy, shell AST analysis, path rules (~20k LOC) |
 | Sandbox | `xai-grok-sandbox` | Landlock / Seatbelt / bwrap deny paths |
-| Extensibility | hooks, plugins, skills, marketplace (**MCP removed**) | Untrusted code + network |
+| Extensibility | MCP, hooks, plugins, skills, marketplace | Untrusted code + network (MCP kill-switch WIP on `no-mcp` branch) |
 | Update | `xai-grok-update` | Auto-download and replace binary |
 | Secrets | `xai-grok-secrets` | Log/output redaction |
 
@@ -42,7 +42,7 @@ Rough scale: **~2,100+ Rust source files**, multi-crate workspace, heavy
 
 1. **Prompt-injected model / untrusted repo content** — primary threat for an
    agent that runs shell and edits files.
-2. **Malicious plugin / hook** — code execution and network. (MCP servers removed in this fork.)
+2. **Malicious MCP server / plugin / hook** — code execution and network.
 3. **Network attacker** — SSRF to metadata, MITM of update CDN, DNS rebinding.
 4. **Local malware / multi-user host** — world-readable secrets, race on auth files.
 5. **Compromised dependency** — crates.io / git deps in a huge graph.
@@ -255,16 +255,86 @@ Update ─────── x.ai/cli + GCS ──► replace binary
 
 ---
 
-## 9. Change log (hardening fork)
+## 9. Input sanitize (ASCII keyboard default)
 
-| Date | Change |
-|------|--------|
-| 2026-07-15 | Initial analysis + Phase 0: DNS-pin SSRF, expanded dangerous commands, `deny.toml`, hardened sandbox example |
+**Status:** engine landed in `xai-grok-input-sanitize`; TUI/config/slash wiring TBD.
+
+### Goal
+
+Reduce prompt-injection and spoofing that relies on **invisible or deceptive Unicode**
+(zero-width, bidi controls, math lookalike letters, emoji smuggling) while keeping
+normal English keyboard input seamless.
+
+**Does not stop** plain-English injection (“ignore previous instructions”). Still
+need sandbox, permissions, and user judgment.
+
+### Default allowlist
+
+| Keep | Hex |
+|------|-----|
+| Printable ASCII (US keyboard) | `U+0020`–`U+007E` |
+| Newline | `U+000A` (LF); `U+000D` (CR) normalized to LF |
+
+Everything else is classified and **stripped by default**.
+
+### Category switch table (opt-in extensions)
+
+| Category | Severity | Default | User may `/input-allow`? |
+|----------|----------|---------|---------------------------|
+| `tab` | capability | strip | yes |
+| `latin_extended` | capability | strip | yes |
+| `unicode_letters` | capability | strip | yes |
+| `unicode_punctuation` | capability | strip | yes |
+| `emoji` | capability | strip | yes |
+| `math_symbols` | capability | strip | yes |
+| `math_alphanumeric` | security | strip | **no** (lookalike Latin) |
+| `zero_width_format` | security | strip | **no** |
+| `bidi_controls` | security | strip | **no** |
+| `control_c0_c1` | security | strip | **no** |
+| `private_use` | security | strip | **no** |
+| `noncharacters` | security | strip | **no** |
+
+Actions: `strip` | `keep` | `reject`.
+
+### Runtime behavior (target UX)
+
+1. On paste/submit: sanitize → cleaned text.
+2. If any category fired: model gets `<input_sanitize>…</input_sanitize>` note.
+3. **Security hits:** model must **warn the user** (invisible/deceptive chars; possible injection).
+4. **Capability hits:** model may suggest `/input-allow <cat> --session|--user|--project`.
+5. User enables extensions via command (session or permanent config). Model cannot self-enable.
+
+### Config sketch (not yet wired)
+
+```toml
+[input_sanitize]
+enabled = true
+notify_when_stripped = true
+tab = "strip"
+latin_extended = "strip"
+emoji = "strip"
+# … all categories default strip
+```
+
+### Crate
+
+- `crates/codegen/xai-grok-input-sanitize` — pure `sanitize()` + `format_model_note()`
+- Tests: `cargo test -p xai-grok-input-sanitize`
 
 ---
 
-## 10. References (in-tree)
+## 10. Change log (hardening fork)
 
+| Date | Change |
+|------|--------|
+| 2026-07-15 | Phase 0: DNS-pin SSRF, expanded dangerous commands, `deny.toml`, sandbox example |
+| 2026-07-16 | Phase 1 input sanitize: `xai-grok-input-sanitize` engine (ASCII default + categories) |
+
+---
+
+## 11. References (in-tree)
+
+- `crates/codegen/xai-grok-input-sanitize/src/lib.rs`
 - `crates/codegen/xai-grok-pager/docs/user-guide/18-sandbox.md`
 - `crates/codegen/xai-grok-pager/docs/user-guide/22-permissions-and-safety.md`
 - `crates/codegen/xai-grok-sandbox/src/lib.rs`
@@ -272,17 +342,9 @@ Update ─────── x.ai/cli + GCS ──► replace binary
 - `crates/codegen/xai-grok-workspace/src/permission/{manager,shell_access,policy}.rs`
 - `SECURITY.md` (upstream HackerOne)
 
-
 ---
 
-## MCP removed (this fork)
+## MCP note
 
-Model Context Protocol support is **deleted**, not merely disabled:
-
-- Workspace crates `xai-grok-mcp` and `xai-computer-hub-mcp-adapter` removed
-- No stdio/HTTP/SSE MCP client, OAuth, or credential store
-- No `search_tool` / `use_tool` model tools
-- No `grok mcp` CLI / `/mcps` UI
-- Config keys such as `[mcp_servers]` are ignored (loaders removed)
-
-Do not reintroduce MCP without a full security design review.
+WIP hard-disable of MCP lives on the **`no-mcp`** branch only. **`main`** still
+contains upstream MCP code. See that branch before merging MCP changes.
