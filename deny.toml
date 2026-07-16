@@ -1,0 +1,64 @@
+# cargo-deny configuration for the grok-build-hardened fork.
+# Install: cargo install cargo-deny
+# Run:     cargo deny check
+#
+# Start in advisory mode for licenses we have not fully inventoried; tighten
+# over time as the SBOM hardens.
+
+[graph]
+# Target the platforms we care about for advisory/license checks.
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "aarch64-unknown-linux-gnu" },
+    { triple = "x86_64-apple-darwin" },
+    { triple = "aarch64-apple-darwin" },
+    { triple = "x86_64-pc-windows-msvc" },
+]
+all-features = false
+no-default-features = false
+
+[advisories]
+version = 2
+yanked = "warn"
+# Ignore list: only add with a linked issue and expiry.
+ignore = []
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+# Allow common open-source licenses present in this tree (Apache-2.0 root).
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "CC0-1.0",
+    "OpenSSL",
+    "MPL-2.0",
+    "0BSD",
+    "BSL-1.0",
+    "NCSA",
+]
+exceptions = []
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+# Deny known-bad crates when we add them to a blocklist.
+deny = []
+skip = []
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

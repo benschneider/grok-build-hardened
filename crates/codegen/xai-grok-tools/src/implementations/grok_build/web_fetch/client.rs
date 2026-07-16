@@ -94,15 +94,16 @@ impl WebFetchClient {
             }
         }
 
-        // SSRF check.
-        ssrf::check_ssrf(&url).await?;
-
-        // Make request and build output.
-        let http = self.http.get_or_rebuild()?;
+        // SSRF check + DNS pin: only connect to addresses validated here.
+        let ssrf_allow = ssrf::check_ssrf(&url).await?;
+        let http = self.http.client_for_ssrf_allow(&ssrf_allow)?;
         let result = match fetch_url(&http, &url, self.params.max_content_length()).await {
             Ok(result) => result,
             Err(e @ WebFetchError::HttpRequest(_)) => {
-                self.http.invalidate();
+                // Only invalidate the shared pool client (proxy / unpinned path).
+                if self.params.proxy_endpoint.is_some() {
+                    self.http.invalidate();
+                }
                 return Err(e);
             }
             Err(e) => return Err(e),

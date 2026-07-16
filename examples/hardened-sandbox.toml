@@ -1,0 +1,27 @@
+# Example hardened sandbox profile for this fork.
+# Copy to ~/.grok/sandbox.toml or <project>/.grok/sandbox.toml, then:
+#
+#   grok --sandbox hardened
+#
+# See HARDENING.md for the full threat model and recommended flags.
+
+[profiles.hardened]
+extends = "workspace"
+# Block child-process network on Linux (seccomp). No-op on macOS today.
+restrict_network = true
+
+# Kernel-enforced deny (read + write/rename) for common secret paths.
+# On Linux, globs expand at launch only — prefer exact paths for airtight deny.
+deny = [
+    "**/.env",
+    "**/.env.*",
+    "**/*.pem",
+    "**/*.key",
+    "**/id_rsa",
+    "**/id_ed25519",
+    "**/.ssh/**",
+    "**/.aws/credentials",
+    "**/.aws/config",
+    "**/credentials.json",
+    "**/service-account*.json",
+]

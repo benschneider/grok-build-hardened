@@ -3,9 +3,14 @@
 //! Validates that resolved IP addresses are not in private, link-local, or
 //! cloud metadata ranges before allowing outbound HTTP requests.
 //!
+//! Returns the **allowed** socket addresses so the HTTP client can pin DNS
+//! (`ClientBuilder::resolve_to_addrs`) and avoid DNS-rebinding TOCTOU where a
+//! hostname resolves to a public IP at check time and a private IP at connect
+//! time (CWE-918).
+//!
 //! Reference: [IANA IPv4 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv4-special-registry/)
 
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 
 use url::Url;
 
@@ -79,14 +84,29 @@ pub(crate) fn is_blocked_ip(ip: &IpAddr) -> bool {
     }
 }
 
-/// Resolve hostname via DNS and verify none of the resolved addresses are
-/// in blocked private/link-local ranges.
-pub(crate) async fn check_ssrf(url: &Url) -> Result<(), WebFetchError> {
+/// Result of a successful SSRF check: DNS-validated addresses safe to connect to.
+#[derive(Debug, Clone)]
+pub(crate) struct SsrfAllow {
+    /// Original host label (name or IP literal) from the URL.
+    pub host: String,
+    /// Non-blocked resolved addresses (at least one). Used to pin DNS on connect.
+    pub addrs: Vec<SocketAddr>,
+}
+
+/// Resolve hostname via DNS, drop blocked private/link-local ranges, and
+/// return the remaining addresses for DNS pinning.
+///
+/// If **every** resolved address is blocked, returns [`WebFetchError::SsrfBlocked`].
+/// If the set is mixed (public + private), only public/allowed addresses are
+/// returned so dual-stack hosts keep working while private targets stay unused.
+pub(crate) async fn check_ssrf(url: &Url) -> Result<SsrfAllow, WebFetchError> {
     let host = url
         .host_str()
         .ok_or_else(|| WebFetchError::SingleLabelHost {
             host: String::new(),
         })?;
+
+    let port = url.port_or_known_default().unwrap_or(443);
 
     // If the host is already a literal IP, check it directly.
     if let Ok(ip) = host.parse::<IpAddr>() {
@@ -96,13 +116,15 @@ pub(crate) async fn check_ssrf(url: &Url) -> Result<(), WebFetchError> {
                 ip,
             });
         }
-        return Ok(());
+        return Ok(SsrfAllow {
+            host: host.to_string(),
+            addrs: vec![SocketAddr::new(ip, port)],
+        });
     }
 
     // DNS resolution.
-    let port = url.port_or_known_default().unwrap_or(443);
     let addr_str = format!("{host}:{port}");
-    let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host(&addr_str)
+    let addrs: Vec<SocketAddr> = tokio::net::lookup_host(&addr_str)
         .await
         .map_err(|e| WebFetchError::DnsResolution {
             host: host.to_string(),
@@ -114,15 +136,30 @@ pub(crate) async fn check_ssrf(url: &Url) -> Result<(), WebFetchError> {
         return Err(WebFetchError::DnsEmpty(host.to_string()));
     }
 
-    addrs
-        .iter()
-        .find(|addr| is_blocked_ip(&addr.ip()))
-        .map_or(Ok(()), |addr| {
-            Err(WebFetchError::SsrfBlocked {
-                host: host.to_string(),
-                ip: addr.ip(),
-            })
+    let mut blocked_example: Option<IpAddr> = None;
+    let allowed: Vec<SocketAddr> = addrs
+        .into_iter()
+        .filter(|addr| {
+            if is_blocked_ip(&addr.ip()) {
+                blocked_example.get_or_insert(addr.ip());
+                false
+            } else {
+                true
+            }
         })
+        .collect();
+
+    if allowed.is_empty() {
+        return Err(WebFetchError::SsrfBlocked {
+            host: host.to_string(),
+            ip: blocked_example.expect("blocked_example set when all addrs blocked"),
+        });
+    }
+
+    Ok(SsrfAllow {
+        host: host.to_string(),
+        addrs: allowed,
+    })
 }
 
 #[cfg(test)]
@@ -225,6 +262,17 @@ mod tests {
     async fn ssrf_allows_ip_literal_public() {
         let url = Url::parse("https://1.1.1.1/").unwrap();
         let result = check_ssrf(&url).await;
-        assert!(result.is_ok());
+        let allow = result.expect("public IP literal should be allowed");
+        assert_eq!(allow.host, "1.1.1.1");
+        assert_eq!(allow.addrs.len(), 1);
+        assert_eq!(allow.addrs[0].ip(), "1.1.1.1".parse::<IpAddr>().unwrap());
+        assert_eq!(allow.addrs[0].port(), 443);
+    }
+
+    #[tokio::test]
+    async fn ssrf_allows_ip_literal_loopback_with_port() {
+        let url = Url::parse("http://127.0.0.1:3000/").unwrap();
+        let allow = check_ssrf(&url).await.expect("loopback allowed");
+        assert_eq!(allow.addrs[0].port(), 3000);
     }
 }
