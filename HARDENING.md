@@ -330,8 +330,18 @@ Actions: `strip` | `keep` | `reject`.
 | `role_override_density` | Clusters of instruction-control markers |
 | `char_distribution_anomaly` | χ² vs English letter baseline |
 | `symbol_digit_skew` | Digit/symbol-heavy “prose” |
+| `trailing_whitespace_channel` | Trailing spaces/tabs on many lines |
+| `low_compressibility` | Near-random / packed residual after crude RLE+backref |
+| `lsb_bias` | Printable-byte LSB monobit (fair-coin or extreme) |
+| `token_length_anomaly` | Uniform or extreme mean token lengths |
+| `image_statistical_anomaly` | Image entropy / uniform bytes / fair LSBs |
+| `image_container_anomaly` | PNG text/ancillary mass, JPEG data after EOI |
 
 Score 0–100 → level none/low/medium/high/critical. Medium+ attaches model note + toast.
+
+**Images:** `analyze_image_bytes` runs on base64 tool/MCP image blocks (no full
+decode). Elevated findings insert an `<untrusted_content>` text block **before**
+the image; pixel bytes are not rewritten.
 
 ### Config (wired)
 
@@ -352,17 +362,45 @@ latin_extended = "keep"   # example opt-in
 /input-allow status
 ```
 
+### Untrusted external content (tools / MCP / files / web)
+
+**Problem:** Worst injections often arrive *indirectly* via MCP results, README/file
+reads, web_fetch, and shell stdout — not via terminal typing.
+
+**Policy** (`SanitizePolicy::untrusted_external`): keep languages/punctuation/emoji/tabs;
+strip all security Unicode; run residual-risk analysis. When strip/analysis fires, wrap
+with `<untrusted_content source="…">` so the model does not treat tool text as system.
+
+**Choke points:**
+
+1. **Main agent loop:** `FinalizedToolset::finalize_output` — tool `prompt_text`
+   (MCP, read_file, web_fetch, bash, …) before `<system-reminder>` append.
+2. **Hub / ContentBlock path:** `sanitize_model_content_blocks` on
+   `TypedToolOutput.model_output`.
+3. **Skills:** `build_skill_message` / `build_skill_block` (marketplace + local).
+4. **System prompt:** `PromptContext::render` final output; **AGENTS.md/rules**
+   at load time.
+5. **Hooks:** deny `reason` / client `systemMessage` (command, HTTP, client).
+6. **Reminders:** `wrap_reminder_with_tag` bodies.
+
+Shared/installed skills and system prompts are **not** trusted by label —
+they are filtered the same as file/web content.
+
 ### Modules
 
 | Path | Role |
 |------|------|
-| `xai-grok-input-sanitize` | Pure engine (classify, sanitize, analyze, note, config) |
+| `xai-grok-input-sanitize` | Terminal + untrusted policies, analyze, notes |
+| `xai-grok-tools` finalize_output / skills / reminders | Tool + skill + reminder filters |
+| `xai-tool-runtime` | ContentBlock model_output filter (hub path) |
+| `xai-grok-agent` render / agents_md | System prompt + AGENTS.md |
+| `xai-grok-hooks` / shell client hooks | Hook deny reasons |
 | `pager/src/input_sanitize/` | Session overlay, apply, **persist** |
-| `pager/.../input_allow.rs` | Slash commands |
 | `tests/adversarial.rs` | Adversarial goldens |
 
 ```bash
 cargo test -p xai-grok-input-sanitize
+cargo test -p xai-tool-runtime --lib extract_strips
 ```
 
 ---
@@ -377,6 +415,7 @@ cargo test -p xai-grok-input-sanitize
 | 2026-07-16 | Residual analysis + closed ingresses; config load/persist for `--user`/`--project` |
 | 2026-07-16 | Adversarial harden: pending paste notes, interject/bash/JSON gates, filler→security, fail-closed headless reject |
 | 2026-07-16 | Residual-risk analysis: statistical/stego/phrase signals on cleaned text + strip transform |
+| 2026-07-16 | Untrusted external filter: tools/MCP/files/web + skills + system prompts + AGENTS.md + hooks + reminders |
 
 ---
 

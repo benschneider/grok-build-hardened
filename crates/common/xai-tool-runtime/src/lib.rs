@@ -34,6 +34,7 @@ pub use notification::{
 pub use render::{
     ModelOutputExtractor, ToolChatCompletion, ToolChatCompletionResponse, ToolCodeExecutionResult,
     ToolOutput, ToolStreamError, extract_content_blocks, extractor_for,
+    sanitize_model_content_blocks,
 };
 pub use search::{SearchSnapshot, ServerSummary, ToolIndex, ToolSearchIndex, ToolSearchResult};
 pub use streaming::{PartialResultPayload, stream_chunk};

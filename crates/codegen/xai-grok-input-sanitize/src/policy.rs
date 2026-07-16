@@ -69,6 +69,28 @@ impl Default for SanitizePolicy {
 }
 
 impl SanitizePolicy {
+    /// Policy for **external / tool** content (MCP results, file reads, web
+    /// fetch, shell stdout, etc.).
+    ///
+    /// Keeps capability Unicode (languages, punctuation, emoji, tabs) so real
+    /// docs and code survive. Still **strips all security categories** (ZW,
+    /// bidi, lookalikes, controls, PUA, noncharacters) and runs residual-risk
+    /// analysis. Stricter than nothing; looser than the terminal ASCII default.
+    pub fn untrusted_external() -> Self {
+        let mut p = Self::default();
+        for cat in [
+            RiskCategory::Tab,
+            RiskCategory::Emoji,
+            RiskCategory::MathSymbols,
+            RiskCategory::LatinExtended,
+            RiskCategory::UnicodeLetters,
+            RiskCategory::UnicodePunctuation,
+        ] {
+            let _ = p.allow_keep(cat);
+        }
+        p
+    }
+
     pub fn action(&self, cat: RiskCategory) -> CategoryAction {
         self.actions
             .get(&cat)

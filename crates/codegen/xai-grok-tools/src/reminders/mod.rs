@@ -38,6 +38,11 @@ pub fn wrap_reminder(text: &str) -> String {
 /// Use [`DEFAULT_REMINDER_TAG`] unless the harness requires a different
 /// tag name (harness-specific tags live with the harness crate).
 pub fn wrap_reminder_with_tag(text: &str, tag: &str) -> String {
+    // Reminder bodies often re-surface file/tool/skill context — filter first.
+    let text = xai_grok_input_sanitize::filter_untrusted_text(
+        text,
+        xai_grok_input_sanitize::UntrustedSource::Reminder,
+    );
     format!("<{tag}>\n{text}\n</{tag}>")
 }
 
@@ -48,6 +53,11 @@ pub fn wrap_reminder_with_tag(text: &str, tag: &str) -> String {
 /// rather than questioning the prompt. The UI shows the raw prompt text;
 /// only the model receives this framed version.
 pub fn format_scheduled_task_prompt(prompt: &str, task_id: &str, human_schedule: &str) -> String {
+    // Scheduled prompts are user-authored originally but stored/shared; filter.
+    let prompt = xai_grok_input_sanitize::filter_untrusted_text(
+        prompt,
+        xai_grok_input_sanitize::UntrustedSource::Reminder,
+    );
     format!(
         "<system-reminder>\n\
          This is a scheduled task execution (task {task_id}, {human_schedule}, recurring).\n\

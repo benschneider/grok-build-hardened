@@ -57,6 +57,11 @@ pub struct SkillOutput {
 /// Used on both the invocation path (skill tool, slash expansion) and
 /// preloading paths (agent definitions) — no separate instruct prefix.
 pub fn build_skill_message(skill: &SkillInfo, content: &str) -> String {
+    // Skills are shared/installed markdown — untrusted even when labeled "system".
+    let content = xai_grok_input_sanitize::filter_untrusted_text(
+        content,
+        xai_grok_input_sanitize::UntrustedSource::Skill,
+    );
     format!(
         "<skill name=\"{}\" description=\"{}\" path=\"{}\">\n{}\n</skill>",
         skill.name, skill.description, skill.path, content
@@ -75,6 +80,10 @@ pub fn build_skill_message(skill: &SkillInfo, content: &str) -> String {
 /// </skill>
 /// ```
 pub fn build_skill_block(name: &str, args: &str, content: &str) -> String {
+    let content = xai_grok_input_sanitize::filter_untrusted_text(
+        content,
+        xai_grok_input_sanitize::UntrustedSource::Skill,
+    );
     if args.is_empty() {
         format!("<skill name=\"{name}\">\n{content}\n</skill>")
     } else {

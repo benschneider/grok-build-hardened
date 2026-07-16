@@ -114,6 +114,18 @@ pub enum SignalKind {
     CharDistributionAnomaly,
     /// Odd digit/symbol ratio for claimed natural language.
     SymbolDigitSkew,
+    /// Trailing spaces / tabs on lines used as a bit channel.
+    TrailingWhitespaceChannel,
+    /// Low compressibility ratio (near-random / packed payload).
+    LowCompressibility,
+    /// Chi-square uniformity of printable-byte LSBs (stego / packed bits).
+    LsbBias,
+    /// Homogeneous word-length / token statistics atypical of prose.
+    TokenLengthAnomaly,
+    /// Image payload: high entropy / uniform bytes / LSB bias / odd containers.
+    ImageStatisticalAnomaly,
+    /// Image payload: suspicious PNG ancillary / oversized non-IDAT mass.
+    ImageContainerAnomaly,
 }
 
 impl SignalKind {
@@ -130,6 +142,12 @@ impl SignalKind {
             Self::RoleOverrideDensity => "role_override_density",
             Self::CharDistributionAnomaly => "char_distribution_anomaly",
             Self::SymbolDigitSkew => "symbol_digit_skew",
+            Self::TrailingWhitespaceChannel => "trailing_whitespace_channel",
+            Self::LowCompressibility => "low_compressibility",
+            Self::LsbBias => "lsb_bias",
+            Self::TokenLengthAnomaly => "token_length_anomaly",
+            Self::ImageStatisticalAnomaly => "image_statistical_anomaly",
+            Self::ImageContainerAnomaly => "image_container_anomaly",
         }
     }
 }
@@ -151,24 +169,44 @@ pub fn analyze(
     signal_strip_reveals_payload(raw, cleaned, hits, &mut signals);
     signal_zero_width_interleave(raw, policy, &mut signals);
     signal_whitespace_bit_channel(raw, cleaned, &mut signals);
+    signal_trailing_whitespace_channel(cleaned, &mut signals);
     signal_dual_channel(raw, cleaned, policy, &mut signals);
     signal_entropy(cleaned, &mut signals);
+    signal_low_compressibility(cleaned, &mut signals);
+    signal_lsb_bias(cleaned, &mut signals);
+    signal_token_length_anomaly(cleaned, &mut signals);
     signal_encoded_blobs(cleaned, &mut signals);
     signal_injection_phrases(cleaned, &mut signals);
     signal_role_override(cleaned, &mut signals);
     signal_char_distribution(cleaned, &mut signals);
     signal_symbol_digit_skew(cleaned, &mut signals);
 
-    // Sum of signal weights, capped at 100 (phrase hits are intentionally heavy).
+    finish_report(signals)
+}
+
+/// Build a report from an arbitrary signal list (shared with image analysis).
+pub(crate) fn finish_report(signals: Vec<AnalysisSignal>) -> AnalysisReport {
     let linear: u32 = signals.iter().map(|s| s.weight as u32).sum();
     let score = linear.min(100) as u8;
     let level = AnalysisLevel::from_score(score);
-
     AnalysisReport {
         score,
         level,
         signals,
     }
+}
+
+/// Merge two reports (e.g. text sanitize + image check).
+pub fn merge_reports(a: AnalysisReport, b: AnalysisReport) -> AnalysisReport {
+    if a.signals.is_empty() {
+        return b;
+    }
+    if b.signals.is_empty() {
+        return a;
+    }
+    let mut signals = a.signals;
+    signals.extend(b.signals);
+    finish_report(signals)
 }
 
 fn signal_security_carrier_density(raw: &str, hits: &[CategoryHit], out: &mut Vec<AnalysisSignal>) {
@@ -276,6 +314,136 @@ fn signal_zero_width_interleave(
             detail: format!(
                 "{interleaves} zero-width/bidi character(s) interleaved between letters \
                  (classic steganographic / homoglyph channel)"
+            ),
+        });
+    }
+}
+
+fn signal_trailing_whitespace_channel(cleaned: &str, out: &mut Vec<AnalysisSignal>) {
+    // Trailing space/tab runs on many lines = classic line-end stego channel.
+    let mut lines_with_trail = 0usize;
+    let mut total_nonempty = 0usize;
+    let mut trail_bits = 0usize; // count of trailing space chars
+    for line in cleaned.split('\n') {
+        if line.is_empty() {
+            continue;
+        }
+        total_nonempty += 1;
+        let trimmed_end = line.trim_end_matches([' ', '\t']);
+        if trimmed_end.len() < line.len() {
+            lines_with_trail += 1;
+            trail_bits += line.len() - trimmed_end.len();
+        }
+    }
+    if total_nonempty < 6 || lines_with_trail < 4 {
+        return;
+    }
+    let ratio = lines_with_trail as f64 / total_nonempty as f64;
+    if ratio >= 0.4 && trail_bits >= 8 {
+        out.push(AnalysisSignal {
+            kind: SignalKind::TrailingWhitespaceChannel,
+            weight: if ratio >= 0.7 { 30 } else { 20 },
+            detail: format!(
+                "{lines_with_trail}/{total_nonempty} non-empty lines have trailing whitespace \
+                 ({trail_bits} trail chars) — possible line-end steganography"
+            ),
+        });
+    }
+}
+
+/// Cheap compressibility: repeated-byte RLE + simple backref savings estimate.
+/// Near-random data barely compresses; English compresses well.
+fn signal_low_compressibility(cleaned: &str, out: &mut Vec<AnalysisSignal>) {
+    let bytes: Vec<u8> = cleaned
+        .bytes()
+        .filter(|b| !b.is_ascii_whitespace())
+        .collect();
+    if bytes.len() < 64 {
+        return;
+    }
+    let ratio = rough_compress_ratio(&bytes);
+    // ratio = compressed/original; high ≈ incompressible ≈ random/packed
+    if ratio >= 0.92 {
+        out.push(AnalysisSignal {
+            kind: SignalKind::LowCompressibility,
+            weight: if ratio >= 0.97 { 28 } else { 18 },
+            detail: format!(
+                "Text compressibility residual ≈ {ratio:.2} (near-random / packed — atypical prose)"
+            ),
+        });
+    }
+}
+
+fn signal_lsb_bias(cleaned: &str, out: &mut Vec<AnalysisSignal>) {
+    // Monobit + chi-square on LSBs of printable ASCII bytes — stego/packed payloads
+    // often look closer to fair coin flips than English.
+    let lsbs: Vec<u8> = cleaned
+        .bytes()
+        .filter(|b| b.is_ascii_graphic())
+        .map(|b| b & 1)
+        .collect();
+    if lsbs.len() < 80 {
+        return;
+    }
+    let ones = lsbs.iter().filter(|&&b| b == 1).count();
+    let zeros = lsbs.len() - ones;
+    let n = lsbs.len() as f64;
+    let chi = {
+        let e = n / 2.0;
+        (ones as f64 - e).powi(2) / e + (zeros as f64 - e).powi(2) / e
+    };
+    // English LSBs are mildly biased; very low chi (near perfect 50/50) + length is odd.
+    // Also flag extreme bias.
+    let p_one = ones as f64 / n;
+    if (0.48..=0.52).contains(&p_one) && lsbs.len() >= 200 && chi < 0.5 {
+        out.push(AnalysisSignal {
+            kind: SignalKind::LsbBias,
+            weight: 22,
+            detail: format!(
+                "Printable-byte LSBs are suspiciously fair ({ones}/{n:.0} ones, χ²={chi:.2}) \
+                 — possible packed/stego bit stream"
+            ),
+        });
+    } else if !(0.35..=0.65).contains(&p_one) {
+        out.push(AnalysisSignal {
+            kind: SignalKind::LsbBias,
+            weight: 14,
+            detail: format!(
+                "Printable-byte LSB bias extreme (p1={p_one:.2}) — atypical for natural text"
+            ),
+        });
+    }
+}
+
+fn signal_token_length_anomaly(cleaned: &str, out: &mut Vec<AnalysisSignal>) {
+    let tokens: Vec<&str> = cleaned
+        .split(|c: char| c.is_whitespace() || c.is_ascii_punctuation())
+        .filter(|t| !t.is_empty())
+        .collect();
+    if tokens.len() < 20 {
+        return;
+    }
+    let lens: Vec<f64> = tokens.iter().map(|t| t.chars().count() as f64).collect();
+    let mean = lens.iter().sum::<f64>() / lens.len() as f64;
+    let var = lens.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / lens.len() as f64;
+    let std = var.sqrt();
+    // Natural English token lengths: mean ~4–6, std ~2–4. Very low std = generated/tokenized soup.
+    if tokens.len() >= 40 && std < 1.2 && mean > 2.0 {
+        out.push(AnalysisSignal {
+            kind: SignalKind::TokenLengthAnomaly,
+            weight: 16,
+            detail: format!(
+                "Token lengths unusually uniform (mean={mean:.1}, std={std:.2}) — atypical prose"
+            ),
+        });
+    }
+    // Extremely long average tokens often base64/hex without separators.
+    if mean >= 24.0 {
+        out.push(AnalysisSignal {
+            kind: SignalKind::TokenLengthAnomaly,
+            weight: 20,
+            detail: format!(
+                "Mean token length {mean:.1} is extreme — packed/encoded-like tokens"
             ),
         });
     }
@@ -623,7 +791,7 @@ fn signal_symbol_digit_skew(cleaned: &str, out: &mut Vec<AnalysisSignal>) {
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
-fn shannon_entropy(bytes: &[u8]) -> f64 {
+pub(crate) fn shannon_entropy(bytes: &[u8]) -> f64 {
     if bytes.is_empty() {
         return 0.0;
     }
@@ -641,6 +809,67 @@ fn shannon_entropy(bytes: &[u8]) -> f64 {
         h -= p * p.log2();
     }
     h
+}
+
+/// Crude size-after-RLE+backref / original. Lower = more compressible.
+fn rough_compress_ratio(bytes: &[u8]) -> f64 {
+    if bytes.is_empty() {
+        return 1.0;
+    }
+    let mut out = 0usize;
+    let mut i = 0;
+    while i < bytes.len() {
+        // RLE run
+        let b = bytes[i];
+        let mut run = 1usize;
+        while i + run < bytes.len() && bytes[i + run] == b && run < 255 {
+            run += 1;
+        }
+        if run >= 3 {
+            out += 2; // marker + count (symbol implied)
+            i += run;
+            continue;
+        }
+        // Short backref: match of length >= 3 within last 32 bytes
+        let window_start = i.saturating_sub(32);
+        let mut best = 0usize;
+        for j in window_start..i {
+            let mut k = 0usize;
+            while i + k < bytes.len() && bytes[j + k] == bytes[i + k] && k < 16 {
+                k += 1;
+                if j + k >= i {
+                    break;
+                }
+            }
+            best = best.max(k);
+        }
+        if best >= 3 {
+            out += 2; // offset+len
+            i += best;
+        } else {
+            out += 1;
+            i += 1;
+        }
+    }
+    (out as f64 / bytes.len() as f64).min(1.0)
+}
+
+/// Chi-square of byte histogram vs uniform (df=255 scale; raw value).
+pub(crate) fn chi_square_uniform(bytes: &[u8]) -> f64 {
+    if bytes.is_empty() {
+        return 0.0;
+    }
+    let mut counts = [0u32; 256];
+    for &b in bytes {
+        counts[b as usize] += 1;
+    }
+    let e = bytes.len() as f64 / 256.0;
+    let mut chi = 0.0;
+    for c in counts {
+        let o = c as f64;
+        chi += (o - e).powi(2) / e;
+    }
+    chi
 }
 
 fn longest_run(s: &str, pred: impl Fn(char) -> bool) -> usize {
@@ -780,5 +1009,47 @@ mod tests {
             .signals
             .iter()
             .any(|s| s.kind == SignalKind::EncodedBlob));
+    }
+
+    #[test]
+    fn trailing_whitespace_channel_flagged() {
+        let p = SanitizePolicy::default();
+        let mut lines = Vec::new();
+        for i in 0..10 {
+            lines.push(format!("line{i}   ")); // trailing spaces
+        }
+        let msg = lines.join("\n");
+        let r = sanitize(&msg, &p).unwrap();
+        assert!(
+            r.analysis
+                .signals
+                .iter()
+                .any(|s| s.kind == SignalKind::TrailingWhitespaceChannel),
+            "signals={:?}",
+            r.analysis.signals
+        );
+    }
+
+    #[test]
+    fn low_compressibility_randomish() {
+        let p = SanitizePolicy::default();
+        // High-entropy printable soup
+        let mut s = String::new();
+        for i in 0..200 {
+            let c = (33 + (i * 17) % 94) as u8 as char;
+            s.push(c);
+        }
+        let r = sanitize(&s, &p).unwrap();
+        assert!(
+            r.analysis.signals.iter().any(|s| matches!(
+                s.kind,
+                SignalKind::LowCompressibility
+                    | SignalKind::HighEntropyCleaned
+                    | SignalKind::LsbBias
+                    | SignalKind::TokenLengthAnomaly
+            )),
+            "expected packed-text signal, got {:?}",
+            r.analysis.signals
+        );
     }
 }

@@ -339,6 +339,10 @@ fn parse_http_blocking_result(
                 let reason = output
                     .reason
                     .unwrap_or_else(|| format!("denied by hook '{}'", hook_name));
+                let reason = xai_grok_input_sanitize::filter_untrusted_text(
+                    &reason,
+                    xai_grok_input_sanitize::UntrustedSource::Hook,
+                );
                 HookRunnerResult::Decision(HookDecision::Deny {
                     reason,
                     hook_name: hook_name.to_string(),

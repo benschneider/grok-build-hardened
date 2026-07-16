@@ -455,6 +455,11 @@ fn parse_blocking_result(
                 .reason
                 .clone()
                 .unwrap_or_else(|| format!("denied by hook '{hook_name}'"));
+            // Hook reason strings are attacker-controlled (shared hook scripts).
+            let reason = xai_grok_input_sanitize::filter_untrusted_text(
+                &reason,
+                xai_grok_input_sanitize::UntrustedSource::Hook,
+            );
 
             if exit_code != DENY_EXIT_CODE && exit_code != 0 {
                 tracing::warn!(

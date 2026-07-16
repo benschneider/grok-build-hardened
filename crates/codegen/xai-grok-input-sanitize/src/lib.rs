@@ -8,38 +8,47 @@
 //! | [`policy`] | Runtime policy + actions |
 //! | [`classify`] | Codepoint → category |
 //! | [`sanitize`] | Single-pass filter + results |
-//! | [`analyze`] | Statistical / steganographic residual risk |
-//! | [`note`] | Model-facing `<input_sanitize>` notes |
+//! | [`analyze`] | Statistical / steganographic residual risk (text) |
+//! | [`analyze_image`] | Statistical / container checks on image bytes |
+//! | [`note`] | Model-facing `<input_sanitize>` / `<untrusted_content>` notes |
+//! | [`untrusted`] | External content policy (MCP/files/web/shell/skills/…) |
 //! | [`config`] | Serde `[input_sanitize]` table → policy |
 //!
-//! # Default policy
+//! # Policies
 //!
-//! Allow only **printable ASCII** (`U+0020`–`U+007E`) plus newlines. Everything
-//! else is classified and stripped unless an extension is set to keep.
-//!
-//! After the mechanical pass, [`analyze`] scores residual injection risk on the
-//! cleaned text (and on the strip transform). Clean-looking ASCII payloads can
-//! still be attacks — analysis attaches model notes when elevated.
+//! - **Terminal (default):** printable ASCII only + residual analysis.
+//! - **Untrusted external:** keep languages/emoji; strip security Unicode +
+//!   residual analysis. Used for tool/MCP/file/web streams into the model.
 //!
 //! See root `HARDENING.md`.
 
 mod analyze;
+mod analyze_image;
 mod category;
 mod classify;
 mod config;
 mod note;
 mod policy;
 mod sanitize;
+mod untrusted;
 
-pub use analyze::{AnalysisLevel, AnalysisReport, AnalysisSignal, SignalKind};
+pub use analyze::{
+    merge_reports, AnalysisLevel, AnalysisReport, AnalysisSignal, SignalKind,
+};
+pub use analyze_image::{
+    analyze_image_bytes, decode_base64_image, image_untrusted_note,
+};
 pub use category::{RiskCategory, Severity};
 pub use classify::{classify, is_base_allowed};
 pub use config::InputSanitizeConfig;
-pub use note::format_model_note;
+pub use note::{format_model_note, format_untrusted_note};
 pub use policy::{CategoryAction, PolicyError, SanitizePolicy};
 pub use sanitize::{
     model_payload, model_payload_with_body, sanitize, security_toast, CategoryHit, SanitizeError,
     SanitizeResult,
+};
+pub use untrusted::{
+    filter_untrusted_text, sanitize_untrusted, untrusted_model_payload, UntrustedSource,
 };
 
 #[cfg(test)]

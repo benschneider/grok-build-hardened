@@ -293,7 +293,12 @@ impl PromptContext {
                 tool_bridge.render_prompt(body, &placeholders).await?
             }
         };
-        Some(prompt)
+        // Shared/custom/assembled system prompts enter every turn — filter as
+        // untrusted external content (skills/marketplace/project overrides).
+        Some(xai_grok_input_sanitize::filter_untrusted_text(
+            &prompt,
+            xai_grok_input_sanitize::UntrustedSource::SystemPrompt,
+        ))
     }
 }
 #[cfg(test)]

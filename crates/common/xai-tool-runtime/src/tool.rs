@@ -373,12 +373,13 @@ impl<T: Tool> ToolDyn for T {
                     match serde_json::to_value(&out) {
                         Ok(value) => {
                             let custom = out.model_output();
+                            // Always run untrusted-content filter (MCP/file/web/
+                            // shell text). extract_content_blocks already filters;
+                            // custom model_output paths need an explicit pass.
                             let model_output = if custom.is_empty() {
-                                // Default path: extract blocks from the
-                                // already-serialised Value.
                                 crate::render::extract_content_blocks(&value)
                             } else {
-                                custom
+                                crate::render::sanitize_model_content_blocks(custom)
                             };
                             let chat_completion_output = out.chat_completion_output();
                             ToolStreamItem::Terminal(Ok(TypedToolOutput {

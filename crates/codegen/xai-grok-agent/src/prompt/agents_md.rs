@@ -168,6 +168,12 @@ async fn read_agents_config_with_options(
         })
         .filter_map(|file_path| {
             let content = std::fs::read_to_string(&file_path).ok()?;
+            // Project/shared instruction files are untrusted (same class as
+            // downloaded skills): strip security Unicode + residual analysis.
+            let content = xai_grok_input_sanitize::filter_untrusted_text(
+                &content,
+                xai_grok_input_sanitize::UntrustedSource::AgentsMd,
+            );
             let file_name = file_path
                 .file_name()
                 .and_then(|f| f.to_str())

@@ -182,7 +182,7 @@ where
                     let model_output = if custom.is_empty() {
                         xai_tool_runtime::extract_content_blocks(&value)
                     } else {
-                        custom
+                        xai_tool_runtime::sanitize_model_content_blocks(custom)
                     };
                     let chat_completion_output = out.chat_completion_output();
                     ToolStreamItem::Terminal(Ok(TypedToolOutput {

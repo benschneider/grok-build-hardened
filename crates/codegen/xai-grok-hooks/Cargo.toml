@@ -17,6 +17,7 @@ tokio = { workspace = true, features = ["process", "rt", "macros", "time"] }
 tracing = { workspace = true }
 url = { workspace = true }
 xai-grok-config = { workspace = true }
+xai-grok-input-sanitize = { workspace = true }
 xai-grok-tools = { workspace = true }
 
 [dev-dependencies]

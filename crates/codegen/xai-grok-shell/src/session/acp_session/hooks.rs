@@ -269,6 +269,11 @@ impl SessionActor {
                 let reason = response
                     .system_message
                     .unwrap_or_else(|| "blocked by client hook".to_string());
+                // Client hook messages are untrusted (remote UI / shared plugins).
+                let reason = xai_grok_input_sanitize::filter_untrusted_text(
+                    &reason,
+                    xai_grok_input_sanitize::UntrustedSource::Hook,
+                );
                 return Ok(Some(
                     self.deny_tool(
                         &call.id,
