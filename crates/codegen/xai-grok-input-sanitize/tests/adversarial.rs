@@ -205,10 +205,13 @@ fn model_note_body_can_contain_fake_close_tag() {
 }
 
 #[test]
-fn zalgo_combining_marks_strip_with_latin_extended() {
+fn zalgo_combining_marks_strip_when_latin_extended_denied() {
+    // Combining marks ride with Latin extended; under Strict / deny they strip.
+    let mut p = SanitizePolicy::default();
+    p.deny_keep(RiskCategory::LatinExtended);
     let zalgo = "a\u{0301}\u{0302}\u{0303}\u{0304}b";
-    assert_eq!(strip(zalgo), "ab");
-    let r = sanitize(zalgo, &SanitizePolicy::default()).unwrap();
+    let r = sanitize(zalgo, &p).unwrap();
+    assert_eq!(r.text, "ab");
     assert!(
         r.hits
             .iter()

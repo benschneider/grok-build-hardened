@@ -516,6 +516,30 @@ const INPUT_SANITIZE_CHILDREN: &[&str] = &[
     "input_sanitize.tab",
 ];
 
+/// Named terminal sanitize profiles (capability keep sets).
+const INPUT_SANITIZE_PROFILE_CHOICES: &[EnumChoice] = &[
+    EnumChoice {
+        canonical: "strict",
+        display: "Strict (ASCII)",
+        description: "Printable ASCII only. Maximum filter; strip accents, emoji, tabs.",
+    },
+    EnumChoice {
+        canonical: "balanced",
+        display: "Balanced",
+        description: "Default: accents, basic emoji, math ops, tabs. Security always strips.",
+    },
+    EnumChoice {
+        canonical: "multilingual",
+        display: "Multilingual",
+        description: "Also keep CJK / Cyrillic / Greek and Unicode punctuation.",
+    },
+    EnumChoice {
+        canonical: "custom",
+        display: "Custom",
+        description: "Fine-tuned via the toggles below (selecting a named profile resets them).",
+    },
+];
+
 /// Build the catalog. Called once at process start via
 /// `SettingsRegistry::defaults()`.
 pub fn default_settings() -> Vec<SettingMeta> {
@@ -1265,16 +1289,42 @@ pub fn default_settings() -> Vec<SettingMeta> {
             restart_required: true,
             hidden_in_minimal: false,
         },
-        // Terminal input sanitizer — group under Editor & Input. Persists to
-        // `[input_sanitize]` (not `[ui]`); live-applied to every agent session.
+        // Terminal input sanitizer — profile (top-level enum) + fine-tune group.
+        // Persists to `[input_sanitize]`; live-applied to every agent session.
+        SettingMeta {
+            key: "input_sanitize.profile",
+            category: SettingCategory::Editor,
+            owner: SettingOwner::Pager,
+            label: "Input sanitize profile",
+            description: "Preset for which Unicode classes may appear in paste/submit. \
+                          Security classes (zero-width, bidi, lookalikes) always strip. \
+                          Exotic emoji still strip before the model.",
+            keywords: &[
+                "input",
+                "sanitize",
+                "profile",
+                "preset",
+                "strict",
+                "balanced",
+                "multilingual",
+                "ascii",
+                "i18n",
+            ],
+            kind: SettingKind::Enum {
+                default: "balanced",
+                choices: INPUT_SANITIZE_PROFILE_CHOICES,
+                supports_preview: false,
+            },
+            restart_required: false,
+            hidden_in_minimal: false,
+        },
         SettingMeta {
             key: "input_sanitize",
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
             label: "Input sanitizer",
-            description: "Filter invisible Unicode and control which character \
-                          classes may appear in paste and submit. Security \
-                          classes (zero-width, bidi, lookalikes) always strip.",
+            description: "Fine-tune enabled, notify, analysis, and per-category allows. \
+                          Use the profile row above for presets.",
             keywords: &[
                 "input",
                 "sanitize",
@@ -1336,8 +1386,8 @@ pub fn default_settings() -> Vec<SettingMeta> {
             restart_required: false,
             hidden_in_minimal: false,
         },
-        // Capability categories: Bool on = allow/keep, off = strip (default).
-        // Group sub-sheet only supports Bool children (Space/Enter toggle).
+        // Capability categories: Bool on = allow/keep. Balanced defaults on for
+        // latin_extended, emoji, math_symbols, tab. Group sub-sheet toggles only.
         SettingMeta {
             key: "input_sanitize.latin_extended",
             category: SettingCategory::Editor,
@@ -1345,7 +1395,7 @@ pub fn default_settings() -> Vec<SettingMeta> {
             label: "Allow Latin extended",
             description: "Keep accented Latin letters (café, naïve, …) in paste/submit.",
             keywords: &["latin", "accent", "cafe", "diacritic", "allow"],
-            kind: SettingKind::Bool { default: false },
+            kind: SettingKind::Bool { default: true },
             restart_required: false,
             hidden_in_minimal: false,
         },
@@ -1376,9 +1426,8 @@ pub fn default_settings() -> Vec<SettingMeta> {
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
             label: "Allow emoji",
-            description: "Keep basic emoji in terminal input (default on). Exotic \
-                          flags/skin-tones/token-stuffing chrome are still stripped \
-                          before the model.",
+            description: "Keep basic emoji in terminal input. Exotic flags/skin-tones/\
+                          token-stuffing chrome still strip before the model.",
             keywords: &["emoji", "smiley", "pictograph", "allow"],
             kind: SettingKind::Bool { default: true },
             restart_required: false,
@@ -1391,7 +1440,7 @@ pub fn default_settings() -> Vec<SettingMeta> {
             label: "Allow math symbols",
             description: "Keep mathematical operators (not lookalike letters).",
             keywords: &["math", "symbols", "operators", "allow"],
-            kind: SettingKind::Bool { default: false },
+            kind: SettingKind::Bool { default: true },
             restart_required: false,
             hidden_in_minimal: false,
         },
@@ -1402,7 +1451,7 @@ pub fn default_settings() -> Vec<SettingMeta> {
             label: "Allow tab character",
             description: "Keep literal tab characters (newline is always kept).",
             keywords: &["tab", "indent", "whitespace", "allow"],
-            kind: SettingKind::Bool { default: false },
+            kind: SettingKind::Bool { default: true },
             restart_required: false,
             hidden_in_minimal: false,
         },

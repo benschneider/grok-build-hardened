@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::category::RiskCategory;
 use crate::policy::{CategoryAction, SanitizePolicy};
 
-/// User-facing config table. All fields optional; missing ⇒ default strip.
+/// User-facing config table. All fields optional; missing ⇒ balanced defaults.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct InputSanitizeConfig {
@@ -13,6 +13,8 @@ pub struct InputSanitizeConfig {
     pub notify_when_stripped: Option<bool>,
     /// Statistical / steganographic residual-risk analysis (default true).
     pub analyze: Option<bool>,
+    /// Named profile: `strict` | `balanced` | `multilingual` (optional).
+    pub profile: Option<String>,
     pub tab: Option<CategoryAction>,
     pub control_c0_c1: Option<CategoryAction>,
     pub bidi_controls: Option<CategoryAction>,
@@ -30,7 +32,16 @@ pub struct InputSanitizeConfig {
 impl InputSanitizeConfig {
     /// Build a runtime policy from this config (defaults + overrides).
     pub fn to_policy(&self) -> SanitizePolicy {
-        let mut p = SanitizePolicy::default();
+        use crate::policy::SanitizeProfile;
+        let mut p = match self.profile.as_deref() {
+            // Custom = hand-tuned mix; start from balanced then apply per-key
+            // overrides below (disk writes both profile=custom and category keys).
+            Some(name) if name.eq_ignore_ascii_case("custom") => SanitizePolicy::default(),
+            Some(name) => SanitizeProfile::parse(name)
+                .unwrap_or(SanitizeProfile::Balanced)
+                .to_policy(),
+            None => SanitizePolicy::default(),
+        };
         if let Some(v) = self.enabled {
             p.enabled = v;
         }
@@ -73,6 +84,9 @@ impl InputSanitizeConfig {
         }
         if other.analyze.is_some() {
             self.analyze = other.analyze;
+        }
+        if other.profile.is_some() {
+            self.profile = other.profile.clone();
         }
         merge_opt(&mut self.tab, other.tab);
         merge_opt(&mut self.control_c0_c1, other.control_c0_c1);

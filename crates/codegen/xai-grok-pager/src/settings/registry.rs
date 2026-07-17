@@ -540,6 +540,14 @@ pub fn current_value_for(
             crate::appearance::cache::load_prompt_suggestions(),
         )),
         // Input sanitize (terminal policy) — live from active agent snapshot.
+        "input_sanitize.profile" => Some(SettingValue::Enum(
+            match pager.input_sanitize.profile.as_str() {
+                "strict" => "strict",
+                "multilingual" => "multilingual",
+                "custom" => "custom",
+                _ => "balanced",
+            },
+        )),
         "input_sanitize.enabled" => Some(SettingValue::Bool(pager.input_sanitize.enabled)),
         "input_sanitize.notify_when_stripped" => {
             Some(SettingValue::Bool(pager.input_sanitize.notify_when_stripped))

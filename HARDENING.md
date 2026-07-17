@@ -282,12 +282,12 @@ Everything else is classified and **stripped by default**.
 
 | Category | Severity | Default | User may `/input-allow`? |
 |----------|----------|---------|---------------------------|
-| `tab` | capability | strip | yes |
-| `latin_extended` | capability | strip | yes |
+| `tab` | capability | **keep** (balanced) | yes |
+| `latin_extended` | capability | **keep** (balanced) | yes |
 | `unicode_letters` | capability | strip | yes |
 | `unicode_punctuation` | capability | strip | yes |
-| `emoji` | capability | **keep** | yes (turn off to strip) |
-| `math_symbols` | capability | strip | yes |
+| `emoji` | capability | **keep** (balanced) | yes |
+| `math_symbols` | capability | **keep** (balanced) | yes |
 | `math_alphanumeric` | security | strip | **no** (lookalike Latin) |
 | `zero_width_format` | security | strip | **no** |
 | `bidi_controls` | security | strip | **no** |
@@ -346,19 +346,24 @@ latin_extended = "keep"   # example opt-in
 ```
 
 ```text
-/settings → Editor & Input → Input sanitizer   # dedicated modal group
-/input-allow latin_extended --session
+/settings → Editor & Input → Input sanitize profile   # strict | balanced | multilingual
+/settings → Editor & Input → Input sanitizer          # fine-tune toggles
 /input-allow unicode_letters --user
-/input-allow tab --project
 /input-deny emoji
 /input-allow status
 ```
 
-The **Input sanitizer** settings group (under Editor & Input) toggles enabled /
-notify / residual analysis and keep-vs-strip for capability categories
-(latin extended, unicode letters/punctuation, emoji, math symbols, tab).
-Security classes remain non-keepable. Changes apply live and persist to
-`[input_sanitize]` in user `config.toml`.
+**Profiles** (capability keep sets; security always strips):
+
+| Profile | Keeps |
+|---------|--------|
+| `strict` | ASCII only |
+| `balanced` (default) | emoji, Latin accents, math ops, tabs |
+| `multilingual` | balanced + Unicode letters & punctuation |
+| `custom` | hand-tuned mix from toggles |
+
+Config: `profile = "balanced"` under `[input_sanitize]`, plus optional per-category
+overrides. Settings modal applies live and persists to user `config.toml`.
 
 ### Untrusted external (mid-stack, not egress)
 

@@ -522,6 +522,9 @@ pub enum Action {
     SetInputSanitizeEnabled(bool),
     SetInputSanitizeNotify(bool),
     SetInputSanitizeAnalyze(bool),
+    /// Apply a named profile (`strict` | `balanced` | `multilingual`).
+    /// `custom` is a no-op (leave current fine-tuned mix).
+    SetInputSanitizeProfile(String),
     /// Capability category keep (`true`) or strip (`false`).
     SetInputSanitizeCategory {
         category: xai_grok_input_sanitize::RiskCategory,

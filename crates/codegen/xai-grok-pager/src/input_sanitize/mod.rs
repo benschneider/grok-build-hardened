@@ -12,6 +12,7 @@ mod session;
 pub use apply::{ApplyKind, AppliedInput};
 pub use persist::{
     load_policy, persist_allow, persist_bool_user, persist_category_user, persist_deny,
+    persist_profile_user,
 };
 pub use session::InputSanitizeSession;
 
@@ -21,6 +22,8 @@ pub struct InputSanitizeSnapshot {
     pub enabled: bool,
     pub notify_when_stripped: bool,
     pub analyze: bool,
+    /// `strict` | `balanced` | `multilingual` | `custom`
+    pub profile: String,
     pub tab_keep: bool,
     pub emoji_keep: bool,
     pub math_symbols_keep: bool,
@@ -31,16 +34,16 @@ pub struct InputSanitizeSnapshot {
 
 impl Default for InputSanitizeSnapshot {
     fn default() -> Self {
-        // Matches `SanitizePolicy::terminal()` defaults (emoji keep; other
-        // capability categories strip until allowed).
+        // Matches `SanitizePolicy::terminal()` / Balanced profile.
         Self {
             enabled: true,
             notify_when_stripped: true,
             analyze: true,
-            tab_keep: false,
+            profile: "balanced".into(),
+            tab_keep: true,
             emoji_keep: true,
-            math_symbols_keep: false,
-            latin_extended_keep: false,
+            math_symbols_keep: true,
+            latin_extended_keep: true,
             unicode_letters_keep: false,
             unicode_punctuation_keep: false,
         }
@@ -49,12 +52,16 @@ impl Default for InputSanitizeSnapshot {
 
 impl InputSanitizeSnapshot {
     pub fn from_policy(p: &xai_grok_input_sanitize::SanitizePolicy) -> Self {
-        use xai_grok_input_sanitize::{CategoryAction, RiskCategory};
+        use xai_grok_input_sanitize::{CategoryAction, RiskCategory, SanitizeProfile};
         let keep = |c: RiskCategory| p.action(c) == CategoryAction::Keep;
+        let profile = SanitizeProfile::detect(p)
+            .map(|p| p.as_str().to_string())
+            .unwrap_or_else(|| "custom".into());
         Self {
             enabled: p.enabled,
             notify_when_stripped: p.notify_when_stripped,
             analyze: p.analyze_enabled,
+            profile,
             tab_keep: keep(RiskCategory::Tab),
             emoji_keep: keep(RiskCategory::Emoji),
             math_symbols_keep: keep(RiskCategory::MathSymbols),

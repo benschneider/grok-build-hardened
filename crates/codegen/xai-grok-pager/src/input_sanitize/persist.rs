@@ -91,6 +91,30 @@ pub fn persist_category_user(
     cwd: Option<&Path>,
 ) -> std::io::Result<SanitizePolicy> {
     write_category_action(&user_config_path(), cat, action)?;
+    // Fine-tuning a category leaves a custom mix; mark profile custom on disk.
+    write_table_string(&user_config_path(), "profile", "custom")?;
+    Ok(load_policy(cwd))
+}
+
+/// Apply a named profile to user config (writes profile + each capability category).
+pub fn persist_profile_user(
+    profile: xai_grok_input_sanitize::SanitizeProfile,
+    cwd: Option<&Path>,
+) -> std::io::Result<SanitizePolicy> {
+    use xai_grok_input_sanitize::RiskCategory;
+    let path = user_config_path();
+    write_table_string(&path, "profile", profile.as_str())?;
+    for &cat in RiskCategory::ALL {
+        if !cat.allow_user_keep() {
+            continue;
+        }
+        let action = if profile.keep_categories().contains(&cat) {
+            CategoryAction::Keep
+        } else {
+            CategoryAction::Strip
+        };
+        write_category_action(&path, cat, action)?;
+    }
     Ok(load_policy(cwd))
 }
 

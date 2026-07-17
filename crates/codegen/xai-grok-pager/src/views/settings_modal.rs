@@ -767,6 +767,7 @@ fn action_for_enum_commit(key: SettingKey, choice: &'static str) -> Option<Actio
         "default_selected_permission" => {
             Some(Action::SetDefaultSelectedPermission(choice.to_string()))
         }
+        "input_sanitize.profile" => Some(Action::SetInputSanitizeProfile(choice.to_string())),
         _ => None,
     }
 }

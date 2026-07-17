@@ -45,7 +45,7 @@ pub use category::{RiskCategory, Severity};
 pub use classify::{classify, is_base_allowed};
 pub use config::InputSanitizeConfig;
 pub use note::{format_model_note, format_untrusted_note};
-pub use policy::{CategoryAction, PolicyError, SanitizePolicy};
+pub use policy::{CategoryAction, PolicyError, SanitizePolicy, SanitizeProfile};
 pub use sanitize::{
     model_payload, model_payload_with_body, sanitize, security_toast, CategoryHit, SanitizeError,
     SanitizeResult,
@@ -84,12 +84,12 @@ mod tests {
     }
 
     #[test]
-    fn cafe_latin_extended_toggle() {
-        let r = strip_default("café");
-        assert_eq!(r.text, "caf");
+    fn cafe_latin_extended_kept_by_default() {
+        // Balanced terminal profile keeps Latin accents.
+        assert_eq!(strip_default("café").text, "café");
         let mut p = SanitizePolicy::default();
-        p.allow_keep(RiskCategory::LatinExtended).unwrap();
-        assert_eq!(sanitize("café", &p).unwrap().text, "café");
+        p.deny_keep(RiskCategory::LatinExtended);
+        assert_eq!(sanitize("café", &p).unwrap().text, "caf");
     }
 
     #[test]
@@ -169,9 +169,58 @@ mod tests {
     }
 
     #[test]
-    fn tab_opt_in() {
+    fn tab_kept_by_default() {
+        assert_eq!(strip_default("a\tb").text, "a\tb");
         let mut p = SanitizePolicy::default();
-        p.allow_keep(RiskCategory::Tab).unwrap();
-        assert_eq!(sanitize("a\tb", &p).unwrap().text, "a\tb");
+        p.deny_keep(RiskCategory::Tab);
+        assert_eq!(sanitize("a\tb", &p).unwrap().text, "ab");
+    }
+
+    #[test]
+    fn math_symbols_kept_by_default() {
+        // ∈ U+2208 is math symbols (capability); lookalike math alphanum still strip.
+        assert_eq!(strip_default("x ∈ S").text, "x ∈ S");
+        let r = strip_default("\u{1D407}ello");
+        assert_eq!(r.text, "ello");
+        assert!(r.has_security_hits());
+    }
+
+    #[test]
+    fn profiles_strict_balanced_multilingual() {
+        let strict = SanitizeProfile::Strict.to_policy();
+        assert_eq!(strict.action(RiskCategory::Emoji), CategoryAction::Strip);
+        assert_eq!(strict.action(RiskCategory::LatinExtended), CategoryAction::Strip);
+
+        let bal = SanitizeProfile::Balanced.to_policy();
+        assert_eq!(bal.action(RiskCategory::Emoji), CategoryAction::Keep);
+        assert_eq!(bal.action(RiskCategory::LatinExtended), CategoryAction::Keep);
+        assert_eq!(bal.action(RiskCategory::MathSymbols), CategoryAction::Keep);
+        assert_eq!(bal.action(RiskCategory::Tab), CategoryAction::Keep);
+        assert_eq!(
+            bal.action(RiskCategory::UnicodeLetters),
+            CategoryAction::Strip
+        );
+
+        let multi = SanitizeProfile::Multilingual.to_policy();
+        assert_eq!(
+            multi.action(RiskCategory::UnicodeLetters),
+            CategoryAction::Keep
+        );
+        assert_eq!(
+            multi.action(RiskCategory::UnicodePunctuation),
+            CategoryAction::Keep
+        );
+        // Security never keep.
+        assert_eq!(
+            multi.action(RiskCategory::ZeroWidthFormat),
+            CategoryAction::Strip
+        );
+
+        assert_eq!(SanitizeProfile::detect(&bal), Some(SanitizeProfile::Balanced));
+        assert_eq!(SanitizeProfile::detect(&strict), Some(SanitizeProfile::Strict));
+        assert_eq!(
+            SanitizeProfile::detect(&multi),
+            Some(SanitizeProfile::Multilingual)
+        );
     }
 }

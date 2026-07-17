@@ -71,7 +71,8 @@ const ALL_SETTINGS_EXERCISED: &[&str] = &[
     "contextual_hints.send_now",
     "contextual_hints.small_screen",
     "contextual_hints.word_select",
-    // Input sanitize group + terminal policy children.
+    // Input sanitize profile + fine-tune group.
+    "input_sanitize.profile",
     "input_sanitize",
     "input_sanitize.enabled",
     "input_sanitize.notify_when_stripped",
@@ -457,8 +458,28 @@ fn enter_on_contextual_hints_group_opens_sub_sheet_and_toggles_children() {
     assert!(matches!(s.mode, SettingsModalMode::Browse));
 }
 
+/// Profile enum: Enter opens picker; commit Multilingual.
+#[test]
+fn enter_on_input_sanitize_profile_commits_multilingual() {
+    let mut s = make_state();
+    navigate_to(&mut s, "input_sanitize.profile");
+    let out = handle_settings_key(&mut s, &press(KeyCode::Enter));
+    assert!(matches!(out, SettingsKeyOutcome::Changed));
+    assert!(matches!(s.mode, SettingsModalMode::PickingEnum { .. }));
+    // balanced (1) → j → multilingual (2)
+    let _ = handle_settings_key(&mut s, &press(KeyCode::Char('j')));
+    let out = handle_settings_key(&mut s, &press(KeyCode::Enter));
+    assert!(
+        matches!(
+            out,
+            SettingsKeyOutcome::Action(Action::SetInputSanitizeProfile(ref n)) if n == "multilingual"
+        ),
+        "expected multilingual profile, got {out:?}",
+    );
+}
+
 /// Input sanitize group: Enter opens the sub-sheet; Space toggles Enabled and
-/// a capability category (latin_extended).
+/// a capability category (unicode_letters, still off under balanced).
 #[test]
 fn enter_on_input_sanitize_group_toggles_and_picks_category() {
     let mut s = make_state();
@@ -481,8 +502,8 @@ fn enter_on_input_sanitize_group_toggles_and_picks_category() {
         "Space on enabled must toggle off, got {out:?}",
     );
 
-    // child 3: latin_extended (after notify, analyze) — default off → Space on.
-    for _ in 0..3 {
+    // child 4: unicode_letters (enabled, notify, analyze, latin_extended) — off → on.
+    for _ in 0..4 {
         let _ = handle_settings_key(&mut s, &press(KeyCode::Char('j')));
     }
     let out = handle_settings_key(&mut s, &press(KeyCode::Char(' ')));
@@ -490,11 +511,11 @@ fn enter_on_input_sanitize_group_toggles_and_picks_category() {
         matches!(
             out,
             SettingsKeyOutcome::Action(Action::SetInputSanitizeCategory {
-                category: xai_grok_input_sanitize::RiskCategory::LatinExtended,
+                category: xai_grok_input_sanitize::RiskCategory::UnicodeLetters,
                 keep: true,
             })
         ),
-        "Space on latin_extended must allow, got {out:?}",
+        "Space on unicode_letters must allow, got {out:?}",
     );
 
     let out = handle_settings_key(&mut s, &press(KeyCode::Esc));

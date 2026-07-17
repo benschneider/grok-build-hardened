@@ -57,30 +57,122 @@ pub struct SanitizePolicy {
 
 impl Default for SanitizePolicy {
     fn default() -> Self {
+        // Balanced terminal profile — see [`SanitizeProfile::Balanced`].
+        SanitizeProfile::Balanced.to_policy()
+    }
+}
+
+/// Named terminal input-sanitize profiles (capability keep sets).
+///
+/// Security classes always strip under every profile. Exotic emoji chrome is
+/// still removed at model-bound egress regardless of the terminal profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SanitizeProfile {
+    /// Printable ASCII + newline only (capability categories strip).
+    Strict,
+    /// Everyday coding: emoji, Latin accents, math ops, tabs. Default.
+    Balanced,
+    /// All capability languages / punctuation (docs, CJK, Cyrillic, …).
+    Multilingual,
+}
+
+impl SanitizeProfile {
+    pub const ALL: &'static [SanitizeProfile] =
+        &[Self::Strict, Self::Balanced, Self::Multilingual];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Strict => "strict",
+            Self::Balanced => "balanced",
+            Self::Multilingual => "multilingual",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "strict" | "ascii" => Some(Self::Strict),
+            "balanced" | "default" | "everyday" => Some(Self::Balanced),
+            "multilingual" | "i18n" | "international" | "permissive" => {
+                Some(Self::Multilingual)
+            }
+            _ => None,
+        }
+    }
+
+    /// Capability categories kept under this profile (security always strip).
+    pub fn keep_categories(self) -> &'static [RiskCategory] {
+        match self {
+            Self::Strict => &[],
+            Self::Balanced => &[
+                RiskCategory::Emoji,
+                RiskCategory::LatinExtended,
+                RiskCategory::MathSymbols,
+                RiskCategory::Tab,
+            ],
+            Self::Multilingual => &[
+                RiskCategory::Tab,
+                RiskCategory::Emoji,
+                RiskCategory::MathSymbols,
+                RiskCategory::LatinExtended,
+                RiskCategory::UnicodeLetters,
+                RiskCategory::UnicodePunctuation,
+            ],
+        }
+    }
+
+    pub fn to_policy(self) -> SanitizePolicy {
         let mut actions = BTreeMap::new();
         for &cat in RiskCategory::ALL {
             actions.insert(cat, CategoryAction::Strip);
         }
-        // Basic emoji (😀 👍 …) is allowed by default in terminal input.
-        // Exotic / token-stuffing chrome is still removed at model-bound egress
-        // (`hard_filter_model_text` / `is_exotic_emoji`).
-        actions.insert(RiskCategory::Emoji, CategoryAction::Keep);
-        Self {
+        for &cat in self.keep_categories() {
+            actions.insert(cat, CategoryAction::Keep);
+        }
+        SanitizePolicy {
             enabled: true,
             notify_when_stripped: true,
             analyze_enabled: true,
             actions,
         }
     }
+
+    /// Best-effort match of a live policy's capability keeps to a named profile.
+    /// Returns `None` when the keep set is a custom mix.
+    pub fn detect(policy: &SanitizePolicy) -> Option<Self> {
+        let keeps: std::collections::BTreeSet<RiskCategory> = RiskCategory::ALL
+            .iter()
+            .copied()
+            .filter(|c| c.allow_user_keep() && policy.action(*c) == CategoryAction::Keep)
+            .collect();
+        for &prof in Self::ALL {
+            let expected: std::collections::BTreeSet<RiskCategory> =
+                prof.keep_categories().iter().copied().collect();
+            if keeps == expected {
+                return Some(prof);
+            }
+        }
+        None
+    }
 }
 
 impl SanitizePolicy {
-    /// Alias for [`Default`]: terminal / headless user input.
-    ///
-    /// Keeps basic emoji; strips other capability Unicode until the user
-    /// allows them. Security classes always strip.
+    /// Alias for [`Default`]: terminal / headless user input ([`SanitizeProfile::Balanced`]).
     pub fn terminal() -> Self {
         Self::default()
+    }
+
+    /// Apply a named profile's capability keep set (preserves enabled / notify / analyze).
+    pub fn apply_profile(&mut self, profile: SanitizeProfile) {
+        for &cat in RiskCategory::ALL {
+            if cat.allow_user_keep() {
+                let action = if profile.keep_categories().contains(&cat) {
+                    CategoryAction::Keep
+                } else {
+                    CategoryAction::Strip
+                };
+                let _ = self.set_action(cat, action);
+            }
+        }
     }
 
     /// Policy for **external / tool** content (MCP results, file reads, web

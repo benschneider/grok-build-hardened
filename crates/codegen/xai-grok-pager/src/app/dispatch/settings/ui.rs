@@ -728,6 +728,9 @@ pub(in crate::app::dispatch) fn action_for_reset(
         ("contextual_hints.word_select", SettingValue::Bool(b)) => {
             Some(Action::SetContextualHintWordSelect(*b))
         }
+        ("input_sanitize.profile", SettingValue::Enum(s)) => {
+            Some(Action::SetInputSanitizeProfile((*s).to_string()))
+        }
         ("input_sanitize.enabled", SettingValue::Bool(b)) => {
             Some(Action::SetInputSanitizeEnabled(*b))
         }

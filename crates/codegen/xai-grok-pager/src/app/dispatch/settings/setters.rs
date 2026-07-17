@@ -1124,6 +1124,47 @@ pub(in crate::app::dispatch) fn set_input_sanitize_analyze(
     )
 }
 
+pub(in crate::app::dispatch) fn set_input_sanitize_profile(
+    app: &mut AppView,
+    profile_name: String,
+) -> Vec<Effect> {
+    use xai_grok_input_sanitize::SanitizeProfile;
+    if profile_name.eq_ignore_ascii_case("custom") {
+        // Custom is display-only for a hand-tuned mix; selecting it is a no-op.
+        return vec![];
+    }
+    let Some(profile) = SanitizeProfile::parse(&profile_name) else {
+        app.show_toast(&format!("Unknown sanitize profile: {profile_name}"));
+        return vec![];
+    };
+    let cwd = active_cwd(app);
+    for agent in app.agents.values_mut() {
+        let mut p = agent.input_sanitize.policy();
+        p.apply_profile(profile);
+        agent.input_sanitize.reload_base(p);
+    }
+    match crate::input_sanitize::persist_profile_user(profile, cwd.as_deref()) {
+        Ok(policy) => {
+            apply_policy_to_all_agents(app, policy);
+            refresh_open_settings_modals(app);
+            tracing::info!(
+                target: "settings",
+                key = "input_sanitize.profile",
+                profile = profile.as_str(),
+                "setting changed"
+            );
+            app.show_toast(&format!("Sanitize profile: {}", profile.as_str()));
+        }
+        Err(e) => {
+            app.show_toast(&format!("Failed to save profile: {e}"));
+            let policy = crate::input_sanitize::load_policy(cwd.as_deref());
+            apply_policy_to_all_agents(app, policy);
+            refresh_open_settings_modals(app);
+        }
+    }
+    vec![]
+}
+
 pub(in crate::app::dispatch) fn set_input_sanitize_category(
     app: &mut AppView,
     category: xai_grok_input_sanitize::RiskCategory,
