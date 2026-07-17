@@ -31,13 +31,14 @@ pub struct InputSanitizeSnapshot {
 
 impl Default for InputSanitizeSnapshot {
     fn default() -> Self {
-        // Matches `SanitizePolicy::terminal()` defaults (all capability strip).
+        // Matches `SanitizePolicy::terminal()` defaults (emoji keep; other
+        // capability categories strip until allowed).
         Self {
             enabled: true,
             notify_when_stripped: true,
             analyze: true,
             tab_keep: false,
-            emoji_keep: false,
+            emoji_keep: true,
             math_symbols_keep: false,
             latin_extended_keep: false,
             unicode_letters_keep: false,

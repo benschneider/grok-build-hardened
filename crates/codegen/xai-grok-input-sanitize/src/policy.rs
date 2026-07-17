@@ -61,6 +61,10 @@ impl Default for SanitizePolicy {
         for &cat in RiskCategory::ALL {
             actions.insert(cat, CategoryAction::Strip);
         }
+        // Basic emoji (😀 👍 …) is allowed by default in terminal input.
+        // Exotic / token-stuffing chrome is still removed at model-bound egress
+        // (`hard_filter_model_text` / `is_exotic_emoji`).
+        actions.insert(RiskCategory::Emoji, CategoryAction::Keep);
         Self {
             enabled: true,
             notify_when_stripped: true,
@@ -71,7 +75,10 @@ impl Default for SanitizePolicy {
 }
 
 impl SanitizePolicy {
-    /// Alias for [`Default`]: ASCII-keyboard terminal / headless user input.
+    /// Alias for [`Default`]: terminal / headless user input.
+    ///
+    /// Keeps basic emoji; strips other capability Unicode until the user
+    /// allows them. Security classes always strip.
     pub fn terminal() -> Self {
         Self::default()
     }

@@ -286,7 +286,7 @@ Everything else is classified and **stripped by default**.
 | `latin_extended` | capability | strip | yes |
 | `unicode_letters` | capability | strip | yes |
 | `unicode_punctuation` | capability | strip | yes |
-| `emoji` | capability | strip | yes |
+| `emoji` | capability | **keep** | yes (turn off to strip) |
 | `math_symbols` | capability | strip | yes |
 | `math_alphanumeric` | security | strip | **no** (lookalike Latin) |
 | `zero_width_format` | security | strip | **no** |

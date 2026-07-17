@@ -523,7 +523,7 @@ fn attack_matrix_report() {
             name: "exotic_emoji_wrap",
             raw: format!("\u{1FAE0}{KEY}\u{1F1FA}\u{1F1F8}"),
             expect_key_in_model_bound: true,
-            expect_security: false, // emoji is capability under terminal strip (hits capability)
+            expect_security: false, // basic emoji kept by terminal default
             expect_no_zw: true,
         },
         Case {

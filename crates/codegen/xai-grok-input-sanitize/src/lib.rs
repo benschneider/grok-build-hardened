@@ -17,7 +17,7 @@
 //!
 //! # Policies
 //!
-//! - **Terminal (default):** printable ASCII only + residual analysis.
+//! - **Terminal (default):** printable ASCII + basic emoji + residual analysis.
 //! - **Untrusted external:** keep languages/emoji; strip security Unicode +
 //!   residual analysis. Used for tool/MCP/file/web streams into the model.
 //! - **Model-bound:** silent hard strip of invisibles + emoji on the API payload.
@@ -93,8 +93,17 @@ mod tests {
     }
 
     #[test]
-    fn emoji_stripped() {
-        assert_eq!(strip_default("hi 👋").text, "hi ");
+    fn emoji_kept_by_default() {
+        // Terminal default allows basic emoji; exotic still dies at model-bound.
+        assert_eq!(strip_default("hi 👋").text, "hi 👋");
+        assert!(!strip_default("hi 👋").has_security_hits());
+    }
+
+    #[test]
+    fn emoji_can_be_stripped_when_denied() {
+        let mut p = SanitizePolicy::default();
+        p.deny_keep(RiskCategory::Emoji);
+        assert_eq!(sanitize("hi 👋", &p).unwrap().text, "hi ");
     }
 
     #[test]

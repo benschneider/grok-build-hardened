@@ -1376,9 +1376,11 @@ pub fn default_settings() -> Vec<SettingMeta> {
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
             label: "Allow emoji",
-            description: "Keep emoji and pictographs in terminal input.",
+            description: "Keep basic emoji in terminal input (default on). Exotic \
+                          flags/skin-tones/token-stuffing chrome are still stripped \
+                          before the model.",
             keywords: &["emoji", "smiley", "pictograph", "allow"],
-            kind: SettingKind::Bool { default: false },
+            kind: SettingKind::Bool { default: true },
             restart_required: false,
             hidden_in_minimal: false,
         },
