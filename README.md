@@ -53,9 +53,7 @@ full MCP/plugin trust, OS isolation you did not enable, or any guarantee against
 prompt injection.
 
 Prefer opting into sandbox (`--sandbox workspace` or stricter) rather than
-trusting any name that sounds security-related. This repo is intentionally
-named as a **personal fork** (e.g. `grok-build-fork-ben`), not a hardened product.
-
+trusting any name that sounds security-related.
 ---
 
 ## Build from source
