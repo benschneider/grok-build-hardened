@@ -425,6 +425,7 @@ cargo test -p xai-tool-runtime --lib extract_strips
 | 2026-07-16 | Residual-risk analysis: statistical/stego/phrase signals on cleaned text + strip transform |
 | 2026-07-16 | Untrusted external filter: tools/MCP/files/web + skills + system prompts + AGENTS.md + hooks + reminders |
 | 2026-07-16 | Model-bound hard strip + architecture simplify (named policies; demote system-prompt re-filter) |
+| 2026-07-16 | Ported upstream monorepo fix: HTTP hooks disable redirect follow (SSRF via 3xx) |
 
 ---
 
