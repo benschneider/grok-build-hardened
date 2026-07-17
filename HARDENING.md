@@ -1,10 +1,11 @@
-# Grok Build Hardening
+# Grok Build — fork notes (robustness / gaps)
 
-Security analysis and hardening roadmap for this fork of SpaceXAI’s open-sourced
-**Grok Build** (`grok`) agent CLI/TUI.
+Security analysis and roadmap for this **unaffiliated personal fork** of
+SpaceXAI’s open-sourced **Grok Build** (`grok`) agent CLI/TUI.
 
-Upstream: published for source transparency under Apache-2.0; external PRs are
-not accepted there. This repository is an independent hardening effort.
+Not affiliated with xAI / SpaceXAI. Upstream publishes source for transparency
+under Apache-2.0; this tree is an independent, opinionated effort and is **not**
+a claim of a hardened or safe product.
 
 ---
 

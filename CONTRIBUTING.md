@@ -1,22 +1,22 @@
 # Contributing
 
-This repository is an **independent fork** of SpaceXAI’s published Grok Build
-source. It is not the official SpaceXAI product tree.
+This repository is an **independent personal fork** of SpaceXAI’s published
+Grok Build source. It is **not** affiliated with xAI / SpaceXAI and is **not**
+their official contribution channel.
 
-SpaceXAI develops upstream Grok Build internally; their public tree is for
-source transparency and local builds under Apache-2.0. This fork may accept
-changes at the maintainer’s discretion — open an issue or PR if you want to
-discuss something, but there is no guarantee of review or merge.
-
-Upstream-only policies and product direction still live with SpaceXAI.
+- **This fork:** issues/PRs are at the maintainer’s discretion; no guarantee of
+  review or merge.
+- **Upstream product / source policy:** still owned by SpaceXAI (they develop
+  Grok Build internally; their public tree is for transparency under Apache-2.0).
 
 ## Security reports
 
-Please report security issues through the process described in
-[`SECURITY.md`](SECURITY.md). Prefer private disclosure for vulnerabilities.
+See [`SECURITY.md`](SECURITY.md). Prefer private disclosure for vulnerabilities
+in this fork. Do not send fork-specific reports to SpaceXAI’s HackerOne as if
+they ship this tree.
 
-## Licensing of this source
+## Licensing
 
-By downloading or using this source, you agree that your use is governed by
-the Apache License, Version 2.0 (see [`LICENSE`](LICENSE)). First-party
-changes in this fork are under the same license unless a file says otherwise.
+Use of this source is governed by the Apache License, Version 2.0 (see
+[`LICENSE`](LICENSE)). First-party changes in this fork are under the same
+license unless a file says otherwise.
