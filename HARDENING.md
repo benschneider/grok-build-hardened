@@ -346,12 +346,19 @@ latin_extended = "keep"   # example opt-in
 ```
 
 ```text
+/settings → Editor & Input → Input sanitizer   # dedicated modal group
 /input-allow latin_extended --session
 /input-allow unicode_letters --user
 /input-allow tab --project
 /input-deny emoji
 /input-allow status
 ```
+
+The **Input sanitizer** settings group (under Editor & Input) toggles enabled /
+notify / residual analysis and keep-vs-strip for capability categories
+(latin extended, unicode letters/punctuation, emoji, math symbols, tab).
+Security classes remain non-keepable. Changes apply live and persist to
+`[input_sanitize]` in user `config.toml`.
 
 ### Untrusted external (mid-stack, not egress)
 

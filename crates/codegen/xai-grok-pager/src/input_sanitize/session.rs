@@ -49,6 +49,39 @@ impl InputSanitizeSession {
         self.base = base;
     }
 
+    /// Replace the base policy while preserving session-only keeps.
+    pub fn reload_base(&mut self, base: SanitizePolicy) {
+        self.base = base;
+        // Drop session keeps that are already Keep in the new base (no-op keeps).
+        self.session_keeps
+            .retain(|&c| self.base.action(c) != CategoryAction::Keep);
+    }
+
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.base.enabled = enabled;
+    }
+
+    pub fn set_notify_when_stripped(&mut self, notify: bool) {
+        self.base.notify_when_stripped = notify;
+    }
+
+    pub fn set_analyze_enabled(&mut self, analyze: bool) {
+        self.base.analyze_enabled = analyze;
+    }
+
+    /// Set a capability category action on the base policy (session keeps adjusted).
+    pub fn set_category_action(
+        &mut self,
+        cat: RiskCategory,
+        action: CategoryAction,
+    ) -> Result<(), PolicyError> {
+        self.base.set_action(cat, action)?;
+        if action != CategoryAction::Keep {
+            self.session_keeps.retain(|&c| c != cat);
+        }
+        Ok(())
+    }
+
     pub fn allow_session(&mut self, cat: RiskCategory) -> Result<(), PolicyError> {
         if !cat.allow_user_keep() {
             return Err(PolicyError::SecurityKeepForbidden(cat));

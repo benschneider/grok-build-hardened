@@ -1032,6 +1032,147 @@ pub(in crate::app::dispatch) fn set_contextual_hint_word_select(
 }
 
 // ---------------------------------------------------------------------------
+// Input sanitize (terminal policy) — `[input_sanitize]` in user config.toml.
+// ---------------------------------------------------------------------------
+
+fn active_cwd(app: &AppView) -> Option<std::path::PathBuf> {
+    match app.active_view {
+        ActiveView::Agent(id) => app.agents.get(&id).map(|a| a.session.cwd.clone()),
+        _ => None,
+    }
+}
+
+fn apply_policy_to_all_agents(
+    app: &mut AppView,
+    policy: xai_grok_input_sanitize::SanitizePolicy,
+) {
+    for agent in app.agents.values_mut() {
+        agent.input_sanitize.reload_base(policy.clone());
+    }
+}
+
+fn set_input_sanitize_bool(
+    app: &mut AppView,
+    key: &'static str,
+    label: &str,
+    new: bool,
+    apply_live: fn(&mut crate::input_sanitize::InputSanitizeSession, bool),
+    persist_key: &str,
+) -> Vec<Effect> {
+    let cwd = active_cwd(app);
+    // Live apply first so the modal snapshot refreshes even if disk write fails.
+    for agent in app.agents.values_mut() {
+        apply_live(&mut agent.input_sanitize, new);
+    }
+    match crate::input_sanitize::persist_bool_user(persist_key, new, cwd.as_deref()) {
+        Ok(policy) => {
+            apply_policy_to_all_agents(app, policy);
+            refresh_open_settings_modals(app);
+            tracing::info!(target: "settings", key, value = new, "setting changed");
+            app.show_toast(&format!("{label}: {}", if new { "on" } else { "off" }));
+        }
+        Err(e) => {
+            app.show_toast(&format!("Failed to save {label}: {e}"));
+            // Reload from disk to undo optimistic live apply.
+            let policy = crate::input_sanitize::load_policy(cwd.as_deref());
+            apply_policy_to_all_agents(app, policy);
+            refresh_open_settings_modals(app);
+        }
+    }
+    vec![]
+}
+
+pub(in crate::app::dispatch) fn set_input_sanitize_enabled(
+    app: &mut AppView,
+    new: bool,
+) -> Vec<Effect> {
+    set_input_sanitize_bool(
+        app,
+        "input_sanitize.enabled",
+        "Input sanitizer",
+        new,
+        |s, v| s.set_enabled(v),
+        "enabled",
+    )
+}
+
+pub(in crate::app::dispatch) fn set_input_sanitize_notify(
+    app: &mut AppView,
+    new: bool,
+) -> Vec<Effect> {
+    set_input_sanitize_bool(
+        app,
+        "input_sanitize.notify_when_stripped",
+        "Sanitize notify",
+        new,
+        |s, v| s.set_notify_when_stripped(v),
+        "notify_when_stripped",
+    )
+}
+
+pub(in crate::app::dispatch) fn set_input_sanitize_analyze(
+    app: &mut AppView,
+    new: bool,
+) -> Vec<Effect> {
+    set_input_sanitize_bool(
+        app,
+        "input_sanitize.analyze",
+        "Sanitize analysis",
+        new,
+        |s, v| s.set_analyze_enabled(v),
+        "analyze",
+    )
+}
+
+pub(in crate::app::dispatch) fn set_input_sanitize_category(
+    app: &mut AppView,
+    category: xai_grok_input_sanitize::RiskCategory,
+    keep: bool,
+) -> Vec<Effect> {
+    use xai_grok_input_sanitize::CategoryAction;
+    let action = if keep {
+        CategoryAction::Keep
+    } else {
+        CategoryAction::Strip
+    };
+    if !category.allow_user_keep() && keep {
+        app.show_toast(&format!(
+            "{} is security-sensitive and cannot be allowed",
+            category.as_str()
+        ));
+        return vec![];
+    }
+    let cwd = active_cwd(app);
+    for agent in app.agents.values_mut() {
+        let _ = agent.input_sanitize.set_category_action(category, action);
+    }
+    match crate::input_sanitize::persist_category_user(category, action, cwd.as_deref()) {
+        Ok(policy) => {
+            apply_policy_to_all_agents(app, policy);
+            refresh_open_settings_modals(app);
+            tracing::info!(
+                target: "settings",
+                key = %format!("input_sanitize.{}", category.as_str()),
+                keep,
+                "setting changed"
+            );
+            app.show_toast(&format!(
+                "{}: {}",
+                category.as_str(),
+                if keep { "allow" } else { "strip" }
+            ));
+        }
+        Err(e) => {
+            app.show_toast(&format!("Failed to save {}: {e}", category.as_str()));
+            let policy = crate::input_sanitize::load_policy(cwd.as_deref());
+            apply_policy_to_all_agents(app, policy);
+            refresh_open_settings_modals(app);
+        }
+    }
+    vec![]
+}
+
+// ---------------------------------------------------------------------------
 // Theme settings: `theme`, `auto_dark_theme`, `auto_light_theme`.
 //
 // Each has a preview/commit split:

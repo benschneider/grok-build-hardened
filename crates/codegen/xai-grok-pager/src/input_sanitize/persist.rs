@@ -52,14 +52,46 @@ pub fn write_category_action(
     cat: RiskCategory,
     action: CategoryAction,
 ) -> std::io::Result<()> {
+    write_table_string(path, cat.as_str(), action.as_str())
+}
+
+/// Persist a boolean field under `[input_sanitize]` (`enabled`, `notify_when_stripped`, `analyze`).
+pub fn write_bool_field(path: &Path, key: &str, value: bool) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     let Some(mut doc) = read_config_document_for_edit(path) else {
         return Ok(());
     };
-    doc["input_sanitize"][cat.as_str()] = toml_edit::value(action.as_str());
+    doc["input_sanitize"][key] = toml_edit::value(value);
     std::fs::write(path, doc.to_string())
+}
+
+fn write_table_string(path: &Path, key: &str, value: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let Some(mut doc) = read_config_document_for_edit(path) else {
+        return Ok(());
+    };
+    doc["input_sanitize"][key] = toml_edit::value(value);
+    std::fs::write(path, doc.to_string())
+}
+
+/// Persist a boolean to the user config and return the reloaded policy (user + project).
+pub fn persist_bool_user(key: &str, value: bool, cwd: Option<&Path>) -> std::io::Result<SanitizePolicy> {
+    write_bool_field(&user_config_path(), key, value)?;
+    Ok(load_policy(cwd))
+}
+
+/// Persist a capability category action to user config; return reloaded policy.
+pub fn persist_category_user(
+    cat: RiskCategory,
+    action: CategoryAction,
+    cwd: Option<&Path>,
+) -> std::io::Result<SanitizePolicy> {
+    write_category_action(&user_config_path(), cat, action)?;
+    Ok(load_policy(cwd))
 }
 
 /// Persist keep for a capability category at user or project scope.

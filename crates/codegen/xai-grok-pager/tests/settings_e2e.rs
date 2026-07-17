@@ -71,6 +71,17 @@ const ALL_SETTINGS_EXERCISED: &[&str] = &[
     "contextual_hints.send_now",
     "contextual_hints.small_screen",
     "contextual_hints.word_select",
+    // Input sanitize group + terminal policy children.
+    "input_sanitize",
+    "input_sanitize.enabled",
+    "input_sanitize.notify_when_stripped",
+    "input_sanitize.analyze",
+    "input_sanitize.latin_extended",
+    "input_sanitize.unicode_letters",
+    "input_sanitize.unicode_punctuation",
+    "input_sanitize.emoji",
+    "input_sanitize.math_symbols",
+    "input_sanitize.tab",
 ];
 
 #[test]
@@ -444,6 +455,71 @@ fn enter_on_contextual_hints_group_opens_sub_sheet_and_toggles_children() {
     let out = handle_settings_key(&mut s, &press(KeyCode::Esc));
     assert!(matches!(out, SettingsKeyOutcome::Changed));
     assert!(matches!(s.mode, SettingsModalMode::Browse));
+}
+
+/// Input sanitize group: Enter opens the sub-sheet; Space toggles Enabled and
+/// a capability category (latin_extended).
+#[test]
+fn enter_on_input_sanitize_group_toggles_and_picks_category() {
+    let mut s = make_state();
+    navigate_to(&mut s, "input_sanitize");
+
+    let out = handle_settings_key(&mut s, &press(KeyCode::Enter));
+    assert!(matches!(out, SettingsKeyOutcome::Changed));
+    assert!(matches!(
+        s.mode,
+        SettingsModalMode::PickingGroup { child_idx: 0, .. }
+    ));
+
+    // child 0: enabled (default true) → Space toggles off.
+    let out = handle_settings_key(&mut s, &press(KeyCode::Char(' ')));
+    assert!(
+        matches!(
+            out,
+            SettingsKeyOutcome::Action(Action::SetInputSanitizeEnabled(false))
+        ),
+        "Space on enabled must toggle off, got {out:?}",
+    );
+
+    // child 3: latin_extended (after notify, analyze) — default off → Space on.
+    for _ in 0..3 {
+        let _ = handle_settings_key(&mut s, &press(KeyCode::Char('j')));
+    }
+    let out = handle_settings_key(&mut s, &press(KeyCode::Char(' ')));
+    assert!(
+        matches!(
+            out,
+            SettingsKeyOutcome::Action(Action::SetInputSanitizeCategory {
+                category: xai_grok_input_sanitize::RiskCategory::LatinExtended,
+                keep: true,
+            })
+        ),
+        "Space on latin_extended must allow, got {out:?}",
+    );
+
+    let out = handle_settings_key(&mut s, &press(KeyCode::Esc));
+    assert!(matches!(out, SettingsKeyOutcome::Changed));
+    assert!(matches!(s.mode, SettingsModalMode::Browse));
+}
+
+/// Mouse parity: click Input sanitize group chevron → sub-sheet opens.
+#[test]
+fn mouse_click_on_input_sanitize_group_opens_sub_sheet() {
+    let mut s = make_state();
+    synth_rects(&mut s);
+    let group_row = row_idx_for(&s, "input_sanitize") as u16;
+    let out = handle_settings_mouse(
+        &mut s,
+        MouseEventKind::Down(crossterm::event::MouseButton::Left),
+        72,
+        group_row,
+    );
+    assert!(
+        matches!(out, SettingsKeyOutcome::Changed)
+            || matches!(s.mode, SettingsModalMode::PickingGroup { .. }),
+        "clicking input_sanitize should open sub-sheet, mode={:?} out={out:?}",
+        s.mode
+    );
 }
 
 /// Mouse parity for the group: clicking the group row's value column opens the

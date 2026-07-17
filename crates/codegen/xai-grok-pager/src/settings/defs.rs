@@ -502,6 +502,20 @@ const CONTEXTUAL_HINTS_CHILDREN: &[&str] = &[
     "contextual_hints.word_select",
 ];
 
+/// Child rows for the Input sanitize group sub-sheet (terminal policy only;
+/// model-bound / untrusted mid-stack security strip is not user-toggleable).
+const INPUT_SANITIZE_CHILDREN: &[&str] = &[
+    "input_sanitize.enabled",
+    "input_sanitize.notify_when_stripped",
+    "input_sanitize.analyze",
+    "input_sanitize.latin_extended",
+    "input_sanitize.unicode_letters",
+    "input_sanitize.unicode_punctuation",
+    "input_sanitize.emoji",
+    "input_sanitize.math_symbols",
+    "input_sanitize.tab",
+];
+
 /// Build the catalog. Called once at process start via
 /// `SettingsRegistry::defaults()`.
 pub fn default_settings() -> Vec<SettingMeta> {
@@ -1249,6 +1263,145 @@ pub fn default_settings() -> Vec<SettingMeta> {
                 supports_preview: false,
             },
             restart_required: true,
+            hidden_in_minimal: false,
+        },
+        // Terminal input sanitizer — group under Editor & Input. Persists to
+        // `[input_sanitize]` (not `[ui]`); live-applied to every agent session.
+        SettingMeta {
+            key: "input_sanitize",
+            category: SettingCategory::Editor,
+            owner: SettingOwner::Pager,
+            label: "Input sanitizer",
+            description: "Filter invisible Unicode and control which character \
+                          classes may appear in paste and submit. Security \
+                          classes (zero-width, bidi, lookalikes) always strip.",
+            keywords: &[
+                "input",
+                "sanitize",
+                "sanitiser",
+                "unicode",
+                "ascii",
+                "zwsp",
+                "zero-width",
+                "bidi",
+                "emoji",
+                "latin",
+                "letters",
+                "paste",
+                "security",
+                "injection",
+                "allow",
+                "strip",
+                "filter",
+            ],
+            kind: SettingKind::Group {
+                children: INPUT_SANITIZE_CHILDREN,
+            },
+            restart_required: false,
+            hidden_in_minimal: false,
+        },
+        SettingMeta {
+            key: "input_sanitize.enabled",
+            category: SettingCategory::Editor,
+            owner: SettingOwner::Pager,
+            label: "Enabled",
+            description: "When off, terminal paste/submit is not sanitized \
+                          (not recommended).",
+            keywords: &["enabled", "on", "off", "disable", "sanitize"],
+            kind: SettingKind::Bool { default: true },
+            restart_required: false,
+            hidden_in_minimal: false,
+        },
+        SettingMeta {
+            key: "input_sanitize.notify_when_stripped",
+            category: SettingCategory::Editor,
+            owner: SettingOwner::Pager,
+            label: "Notify when stripped",
+            description: "Show a toast when security-sensitive characters are \
+                          removed from input.",
+            keywords: &["notify", "toast", "strip", "warn"],
+            kind: SettingKind::Bool { default: true },
+            restart_required: false,
+            hidden_in_minimal: false,
+        },
+        SettingMeta {
+            key: "input_sanitize.analyze",
+            category: SettingCategory::Editor,
+            owner: SettingOwner::Pager,
+            label: "Residual-risk analysis",
+            description: "Score cleaned text for injection phrases, entropy, \
+                          and stego patterns; attach a model note when elevated.",
+            keywords: &["analyze", "analysis", "injection", "risk", "stego"],
+            kind: SettingKind::Bool { default: true },
+            restart_required: false,
+            hidden_in_minimal: false,
+        },
+        // Capability categories: Bool on = allow/keep, off = strip (default).
+        // Group sub-sheet only supports Bool children (Space/Enter toggle).
+        SettingMeta {
+            key: "input_sanitize.latin_extended",
+            category: SettingCategory::Editor,
+            owner: SettingOwner::Pager,
+            label: "Allow Latin extended",
+            description: "Keep accented Latin letters (café, naïve, …) in paste/submit.",
+            keywords: &["latin", "accent", "cafe", "diacritic", "allow"],
+            kind: SettingKind::Bool { default: false },
+            restart_required: false,
+            hidden_in_minimal: false,
+        },
+        SettingMeta {
+            key: "input_sanitize.unicode_letters",
+            category: SettingCategory::Editor,
+            owner: SettingOwner::Pager,
+            label: "Allow Unicode letters",
+            description: "Keep non-Latin letters (CJK, Cyrillic, Greek, …).",
+            keywords: &["unicode", "letters", "cjk", "cyrillic", "greek", "language", "allow"],
+            kind: SettingKind::Bool { default: false },
+            restart_required: false,
+            hidden_in_minimal: false,
+        },
+        SettingMeta {
+            key: "input_sanitize.unicode_punctuation",
+            category: SettingCategory::Editor,
+            owner: SettingOwner::Pager,
+            label: "Allow Unicode punctuation",
+            description: "Keep non-ASCII punctuation and symbols.",
+            keywords: &["punctuation", "symbols", "unicode", "allow"],
+            kind: SettingKind::Bool { default: false },
+            restart_required: false,
+            hidden_in_minimal: false,
+        },
+        SettingMeta {
+            key: "input_sanitize.emoji",
+            category: SettingCategory::Editor,
+            owner: SettingOwner::Pager,
+            label: "Allow emoji",
+            description: "Keep emoji and pictographs in terminal input.",
+            keywords: &["emoji", "smiley", "pictograph", "allow"],
+            kind: SettingKind::Bool { default: false },
+            restart_required: false,
+            hidden_in_minimal: false,
+        },
+        SettingMeta {
+            key: "input_sanitize.math_symbols",
+            category: SettingCategory::Editor,
+            owner: SettingOwner::Pager,
+            label: "Allow math symbols",
+            description: "Keep mathematical operators (not lookalike letters).",
+            keywords: &["math", "symbols", "operators", "allow"],
+            kind: SettingKind::Bool { default: false },
+            restart_required: false,
+            hidden_in_minimal: false,
+        },
+        SettingMeta {
+            key: "input_sanitize.tab",
+            category: SettingCategory::Editor,
+            owner: SettingOwner::Pager,
+            label: "Allow tab character",
+            description: "Keep literal tab characters (newline is always kept).",
+            keywords: &["tab", "indent", "whitespace", "allow"],
+            kind: SettingKind::Bool { default: false },
+            restart_required: false,
             hidden_in_minimal: false,
         },
         // SHELL-owned, persisted to `[ui].voice_capture_mode`. The `hold` choice

@@ -79,11 +79,12 @@ use super::settings::setters::{
     set_contextual_hint_send_now, set_contextual_hint_small_screen, set_contextual_hint_undo,
     set_contextual_hint_word_select, set_default_model, set_default_selected_permission,
     set_display_refresh_auto_cadence, set_fork_secondary_model, set_group_tool_verbs,
-    set_hunk_tracker_mode, set_invert_scroll, set_keep_text_selection, set_max_thoughts_width,
-    set_multiline_mode, set_prompt_suggestions, set_remember_tool_approvals, set_render_mermaid,
-    set_respect_manual_folds, set_scroll_lines, set_scroll_mode, set_scroll_speed,
-    set_show_thinking_blocks, set_show_tips, set_simple_mode, set_theme, set_timestamps,
-    set_vim_mode, set_voice_capture_mode, set_voice_stt_language,
+    set_hunk_tracker_mode, set_input_sanitize_analyze, set_input_sanitize_category,
+    set_input_sanitize_enabled, set_input_sanitize_notify, set_invert_scroll,
+    set_keep_text_selection, set_max_thoughts_width, set_multiline_mode, set_prompt_suggestions,
+    set_remember_tool_approvals, set_render_mermaid, set_respect_manual_folds, set_scroll_lines,
+    set_scroll_mode, set_scroll_speed, set_show_thinking_blocks, set_show_tips, set_simple_mode,
+    set_theme, set_timestamps, set_vim_mode, set_voice_capture_mode, set_voice_stt_language,
 };
 use super::settings::ui::{
     dispatch_confirm_reset_setting, dispatch_open_command_palette, dispatch_open_howto_guides,
@@ -948,6 +949,12 @@ pub(crate) fn dispatch(action: Action, app: &mut AppView) -> Vec<Effect> {
         Action::SetContextualHintSendNow(v) => set_contextual_hint_send_now(app, v),
         Action::SetContextualHintSmallScreen(v) => set_contextual_hint_small_screen(app, v),
         Action::SetContextualHintWordSelect(v) => set_contextual_hint_word_select(app, v),
+        Action::SetInputSanitizeEnabled(v) => set_input_sanitize_enabled(app, v),
+        Action::SetInputSanitizeNotify(v) => set_input_sanitize_notify(app, v),
+        Action::SetInputSanitizeAnalyze(v) => set_input_sanitize_analyze(app, v),
+        Action::SetInputSanitizeCategory { category, keep } => {
+            set_input_sanitize_category(app, category, keep)
+        }
         Action::SetTheme(v) => set_theme(app, v),
         Action::SetAutoDarkTheme(v) => set_auto_dark_theme(app, v),
         Action::SetAutoLightTheme(v) => set_auto_light_theme(app, v),

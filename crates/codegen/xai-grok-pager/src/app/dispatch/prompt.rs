@@ -470,6 +470,9 @@ pub(super) fn dispatch_send_prompt_inner(
                     auto_mode_gate: auto_mode_gate_from_app,
                     ask_user_question_timeout_enabled: ask_user_question_timeout_enabled_from_app,
                     voice_stt_language: voice_stt_language_from_app,
+                    input_sanitize: crate::input_sanitize::InputSanitizeSnapshot::from_policy(
+                        &agent.input_sanitize.policy(),
+                    ),
                 },
             };
 

@@ -650,6 +650,33 @@ fn action_for_bool(key: SettingKey, new: bool) -> Option<Action> {
         "contextual_hints.send_now" => Some(Action::SetContextualHintSendNow(new)),
         "contextual_hints.small_screen" => Some(Action::SetContextualHintSmallScreen(new)),
         "contextual_hints.word_select" => Some(Action::SetContextualHintWordSelect(new)),
+        "input_sanitize.enabled" => Some(Action::SetInputSanitizeEnabled(new)),
+        "input_sanitize.notify_when_stripped" => Some(Action::SetInputSanitizeNotify(new)),
+        "input_sanitize.analyze" => Some(Action::SetInputSanitizeAnalyze(new)),
+        "input_sanitize.tab" => Some(Action::SetInputSanitizeCategory {
+            category: xai_grok_input_sanitize::RiskCategory::Tab,
+            keep: new,
+        }),
+        "input_sanitize.emoji" => Some(Action::SetInputSanitizeCategory {
+            category: xai_grok_input_sanitize::RiskCategory::Emoji,
+            keep: new,
+        }),
+        "input_sanitize.math_symbols" => Some(Action::SetInputSanitizeCategory {
+            category: xai_grok_input_sanitize::RiskCategory::MathSymbols,
+            keep: new,
+        }),
+        "input_sanitize.latin_extended" => Some(Action::SetInputSanitizeCategory {
+            category: xai_grok_input_sanitize::RiskCategory::LatinExtended,
+            keep: new,
+        }),
+        "input_sanitize.unicode_letters" => Some(Action::SetInputSanitizeCategory {
+            category: xai_grok_input_sanitize::RiskCategory::UnicodeLetters,
+            keep: new,
+        }),
+        "input_sanitize.unicode_punctuation" => Some(Action::SetInputSanitizeCategory {
+            category: xai_grok_input_sanitize::RiskCategory::UnicodePunctuation,
+            keep: new,
+        }),
         "multiline_mode" => Some(Action::SetMultilineMode(new)),
         "vim_mode" => Some(Action::SetVimMode(new)),
         "remember_tool_approvals" => Some(Action::SetRememberToolApprovals(new)),

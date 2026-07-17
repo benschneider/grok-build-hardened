@@ -88,6 +88,9 @@ pub(crate) fn refresh_open_settings_modals(app: &mut AppView) {
                 auto_mode_gate: auto_mode_gate_from_app,
                 ask_user_question_timeout_enabled: ask_user_question_timeout_enabled_from_app,
                 voice_stt_language: voice_stt_language_from_app.clone(),
+                input_sanitize: crate::input_sanitize::InputSanitizeSnapshot::from_policy(
+                    &agent.input_sanitize.policy(),
+                ),
             };
         }
     }
@@ -201,6 +204,9 @@ pub(in crate::app::dispatch) fn dispatch_open_settings(app: &mut AppView) -> Vec
         auto_mode_gate: auto_mode_gate_from_app,
         ask_user_question_timeout_enabled: ask_user_question_timeout_enabled_from_app,
         voice_stt_language: voice_stt_language_from_app,
+        input_sanitize: crate::input_sanitize::InputSanitizeSnapshot::from_policy(
+            &agent.input_sanitize.policy(),
+        ),
     };
     let state = Box::new(SettingsModalState::new(
         registry,
@@ -653,6 +659,24 @@ fn agent_available_models(app: &AppView) -> Vec<(String, acp::ModelId)> {
     Vec::new()
 }
 
+fn agent_input_sanitize_snapshot(
+    app: &AppView,
+) -> crate::input_sanitize::InputSanitizeSnapshot {
+    use crate::app::app_view::ActiveView;
+    match app.active_view {
+        ActiveView::Agent(id) => app
+            .agents
+            .get(&id)
+            .map(|a| {
+                crate::input_sanitize::InputSanitizeSnapshot::from_policy(
+                    &a.input_sanitize.policy(),
+                )
+            })
+            .unwrap_or_default(),
+        _ => crate::input_sanitize::InputSanitizeSnapshot::default(),
+    }
+}
+
 /// Build a `PagerLocalSnapshot` from the current `AppView`.
 pub(crate) fn build_pager_snapshot(app: &AppView) -> crate::settings::PagerLocalSnapshot {
     crate::settings::PagerLocalSnapshot {
@@ -671,6 +695,7 @@ pub(crate) fn build_pager_snapshot(app: &AppView) -> crate::settings::PagerLocal
         auto_mode_gate: app.auto_mode_gate,
         ask_user_question_timeout_enabled: app.ask_user_question_timeout_enabled,
         voice_stt_language: app.voice_config.language.clone(),
+        input_sanitize: agent_input_sanitize_snapshot(app),
     }
 }
 
@@ -702,6 +727,47 @@ pub(in crate::app::dispatch) fn action_for_reset(
         }
         ("contextual_hints.word_select", SettingValue::Bool(b)) => {
             Some(Action::SetContextualHintWordSelect(*b))
+        }
+        ("input_sanitize.enabled", SettingValue::Bool(b)) => {
+            Some(Action::SetInputSanitizeEnabled(*b))
+        }
+        ("input_sanitize.notify_when_stripped", SettingValue::Bool(b)) => {
+            Some(Action::SetInputSanitizeNotify(*b))
+        }
+        ("input_sanitize.analyze", SettingValue::Bool(b)) => {
+            Some(Action::SetInputSanitizeAnalyze(*b))
+        }
+        ("input_sanitize.tab", SettingValue::Bool(b)) => Some(Action::SetInputSanitizeCategory {
+            category: xai_grok_input_sanitize::RiskCategory::Tab,
+            keep: *b,
+        }),
+        ("input_sanitize.emoji", SettingValue::Bool(b)) => Some(Action::SetInputSanitizeCategory {
+            category: xai_grok_input_sanitize::RiskCategory::Emoji,
+            keep: *b,
+        }),
+        ("input_sanitize.math_symbols", SettingValue::Bool(b)) => {
+            Some(Action::SetInputSanitizeCategory {
+                category: xai_grok_input_sanitize::RiskCategory::MathSymbols,
+                keep: *b,
+            })
+        }
+        ("input_sanitize.latin_extended", SettingValue::Bool(b)) => {
+            Some(Action::SetInputSanitizeCategory {
+                category: xai_grok_input_sanitize::RiskCategory::LatinExtended,
+                keep: *b,
+            })
+        }
+        ("input_sanitize.unicode_letters", SettingValue::Bool(b)) => {
+            Some(Action::SetInputSanitizeCategory {
+                category: xai_grok_input_sanitize::RiskCategory::UnicodeLetters,
+                keep: *b,
+            })
+        }
+        ("input_sanitize.unicode_punctuation", SettingValue::Bool(b)) => {
+            Some(Action::SetInputSanitizeCategory {
+                category: xai_grok_input_sanitize::RiskCategory::UnicodePunctuation,
+                keep: *b,
+            })
         }
         ("multiline_mode", SettingValue::Bool(b)) => Some(Action::SetMultilineMode(*b)),
         ("render_mermaid", SettingValue::Enum(s)) => {

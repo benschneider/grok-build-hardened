@@ -517,6 +517,16 @@ pub enum Action {
     SetContextualHintSendNow(bool),
     SetContextualHintSmallScreen(bool),
     SetContextualHintWordSelect(bool),
+    /// Terminal `[input_sanitize]` settings (settings modal group). Live-applied
+    /// to all agents and persisted to user `config.toml`.
+    SetInputSanitizeEnabled(bool),
+    SetInputSanitizeNotify(bool),
+    SetInputSanitizeAnalyze(bool),
+    /// Capability category keep (`true`) or strip (`false`).
+    SetInputSanitizeCategory {
+        category: xai_grok_input_sanitize::RiskCategory,
+        keep: bool,
+    },
     /// Commit the active theme (canonical name, e.g. `"groknight"`, `"auto"`).
     SetTheme(String),
     /// Commit the theme used when the OS is in dark mode. Only updates

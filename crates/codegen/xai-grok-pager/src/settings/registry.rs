@@ -279,6 +279,9 @@ pub struct PagerLocalSnapshot {
     /// language actually in effect when `[ui].voice_stt_language` is unset but
     /// an explicit `[voice].language` applies.
     pub voice_stt_language: String,
+    /// Live terminal `[input_sanitize]` policy from the active agent (defaults
+    /// when no agent). Powered by the Input sanitize settings group.
+    pub input_sanitize: crate::input_sanitize::InputSanitizeSnapshot,
 }
 
 impl Default for PagerLocalSnapshot {
@@ -302,6 +305,7 @@ impl Default for PagerLocalSnapshot {
             auto_mode_gate: false,
             ask_user_question_timeout_enabled: None,
             voice_stt_language: xai_grok_voice::STT_LANGUAGE_DEFAULT.to_string(),
+            input_sanitize: crate::input_sanitize::InputSanitizeSnapshot::default(),
         }
     }
 }
@@ -535,6 +539,26 @@ pub fn current_value_for(
         "prompt_suggestions" => Some(SettingValue::Bool(
             crate::appearance::cache::load_prompt_suggestions(),
         )),
+        // Input sanitize (terminal policy) — live from active agent snapshot.
+        "input_sanitize.enabled" => Some(SettingValue::Bool(pager.input_sanitize.enabled)),
+        "input_sanitize.notify_when_stripped" => {
+            Some(SettingValue::Bool(pager.input_sanitize.notify_when_stripped))
+        }
+        "input_sanitize.analyze" => Some(SettingValue::Bool(pager.input_sanitize.analyze)),
+        "input_sanitize.tab" => Some(SettingValue::Bool(pager.input_sanitize.tab_keep)),
+        "input_sanitize.emoji" => Some(SettingValue::Bool(pager.input_sanitize.emoji_keep)),
+        "input_sanitize.math_symbols" => {
+            Some(SettingValue::Bool(pager.input_sanitize.math_symbols_keep))
+        }
+        "input_sanitize.latin_extended" => {
+            Some(SettingValue::Bool(pager.input_sanitize.latin_extended_keep))
+        }
+        "input_sanitize.unicode_letters" => {
+            Some(SettingValue::Bool(pager.input_sanitize.unicode_letters_keep))
+        }
+        "input_sanitize.unicode_punctuation" => {
+            Some(SettingValue::Bool(pager.input_sanitize.unicode_punctuation_keep))
+        }
         "respect_manual_folds" => Some(SettingValue::Bool(pager.respect_manual_folds)),
         // SHELL — canonicalized from `[ui].hunk_tracker_mode`.
         "hunk_tracker_mode" => Some(SettingValue::Enum(canonical_hunk_tracker_mode(
