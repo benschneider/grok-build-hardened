@@ -436,4 +436,4 @@ cargo test -p xai-tool-runtime --lib extract_strips
 - `crates/codegen/xai-grok-sandbox/src/lib.rs`
 - `crates/codegen/xai-grok-tools/src/implementations/grok_build/web_fetch/ssrf.rs`
 - `crates/codegen/xai-grok-workspace/src/permission/{manager,shell_access,policy}.rs`
-- `SECURITY.md` (upstream HackerOne)
+- `SECURITY.md` (fork maintainer + upstream HackerOne split)
