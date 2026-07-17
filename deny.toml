@@ -1,4 +1,4 @@
-# cargo-deny configuration for the grok-build-hardened fork.
+# cargo-deny configuration for this personal Grok Build fork.
 # Install: cargo install cargo-deny
 # Run:     cargo deny check
 #
