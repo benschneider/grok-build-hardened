@@ -520,23 +520,27 @@ const INPUT_SANITIZE_CHILDREN: &[&str] = &[
 const INPUT_SANITIZE_PROFILE_CHOICES: &[EnumChoice] = &[
     EnumChoice {
         canonical: "strict",
-        display: "Strict (ASCII)",
-        description: "Printable ASCII only. Maximum filter; strip accents, emoji, tabs.",
+        display: "Strict (ASCII only)",
+        description: "Only plain English keyboard characters (A–Z, 0–9, punctuation). \
+                      Removes accents, emoji, tabs, and non-English letters.",
     },
     EnumChoice {
         canonical: "balanced",
-        display: "Balanced",
-        description: "Default: accents, basic emoji, math ops, tabs. Security always strips.",
+        display: "Balanced (recommended)",
+        description: "Everyday coding: accents (café), smileys, math (≤ ∈), and tabs. \
+                      Still blocks invisible/spoof characters. Default.",
     },
     EnumChoice {
         canonical: "multilingual",
         display: "Multilingual",
-        description: "Also keep CJK / Cyrillic / Greek and Unicode punctuation.",
+        description: "Like Balanced, plus non-English writing systems \
+                      (中文, 日本語, Русский, Ελληνικά) and fancy punctuation.",
     },
     EnumChoice {
         canonical: "custom",
         display: "Custom",
-        description: "Fine-tuned via the toggles below (selecting a named profile resets them).",
+        description: "Your own mix from the Input sanitizer toggles. \
+                      Picking Strict/Balanced/Multilingual overwrites those toggles.",
     },
 ];
 
@@ -1295,10 +1299,10 @@ pub fn default_settings() -> Vec<SettingMeta> {
             key: "input_sanitize.profile",
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
-            label: "Input sanitize profile",
-            description: "Preset for which Unicode classes may appear in paste/submit. \
-                          Security classes (zero-width, bidi, lookalikes) always strip. \
-                          Exotic emoji still strip before the model.",
+            label: "Input filter profile",
+            description: "How strict to filter text you paste or send. \
+                          Invisible and spoofing characters are always removed. \
+                          Use Input sanitizer below for individual toggles.",
             keywords: &[
                 "input",
                 "sanitize",
@@ -1309,6 +1313,7 @@ pub fn default_settings() -> Vec<SettingMeta> {
                 "multilingual",
                 "ascii",
                 "i18n",
+                "filter",
             ],
             kind: SettingKind::Enum {
                 default: "balanced",
@@ -1323,8 +1328,8 @@ pub fn default_settings() -> Vec<SettingMeta> {
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
             label: "Input sanitizer",
-            description: "Fine-tune enabled, notify, analysis, and per-category allows. \
-                          Use the profile row above for presets.",
+            description: "Turn the filter on/off and choose which character types to keep. \
+                          Changing a toggle switches the profile to Custom.",
             keywords: &[
                 "input",
                 "sanitize",
@@ -1354,10 +1359,10 @@ pub fn default_settings() -> Vec<SettingMeta> {
             key: "input_sanitize.enabled",
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
-            label: "Enabled",
-            description: "When off, terminal paste/submit is not sanitized \
-                          (not recommended).",
-            keywords: &["enabled", "on", "off", "disable", "sanitize"],
+            label: "Filter paste and send",
+            description: "When on (recommended), text you paste or submit is cleaned \
+                          before it reaches the model. When off, nothing is filtered.",
+            keywords: &["enabled", "on", "off", "disable", "sanitize", "filter"],
             kind: SettingKind::Bool { default: true },
             restart_required: false,
             hidden_in_minimal: false,
@@ -1366,10 +1371,10 @@ pub fn default_settings() -> Vec<SettingMeta> {
             key: "input_sanitize.notify_when_stripped",
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
-            label: "Notify when stripped",
-            description: "Show a toast when security-sensitive characters are \
-                          removed from input.",
-            keywords: &["notify", "toast", "strip", "warn"],
+            label: "Toast when characters removed",
+            description: "Show a short notice when hidden or spoofing characters \
+                          (zero-width spaces, bidi overrides, …) are stripped.",
+            keywords: &["notify", "toast", "strip", "warn", "alert"],
             kind: SettingKind::Bool { default: true },
             restart_required: false,
             hidden_in_minimal: false,
@@ -1378,10 +1383,11 @@ pub fn default_settings() -> Vec<SettingMeta> {
             key: "input_sanitize.analyze",
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
-            label: "Residual-risk analysis",
-            description: "Score cleaned text for injection phrases, entropy, \
-                          and stego patterns; attach a model note when elevated.",
-            keywords: &["analyze", "analysis", "injection", "risk", "stego"],
+            label: "Warn on suspicious text",
+            description: "After cleaning, check for jailbreak phrases, odd encodings, \
+                          and hidden patterns. If risk is elevated, the model gets a note \
+                          to treat the text carefully.",
+            keywords: &["analyze", "analysis", "injection", "risk", "stego", "warn", "jailbreak"],
             kind: SettingKind::Bool { default: true },
             restart_required: false,
             hidden_in_minimal: false,
@@ -1392,9 +1398,10 @@ pub fn default_settings() -> Vec<SettingMeta> {
             key: "input_sanitize.latin_extended",
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
-            label: "Allow Latin extended",
-            description: "Keep accented Latin letters (café, naïve, …) in paste/submit.",
-            keywords: &["latin", "accent", "cafe", "diacritic", "allow"],
+            label: "Accented Latin letters",
+            description: "Allow characters like café, naïve, résumé, España. \
+                          Off = strip accents (café → caf).",
+            keywords: &["latin", "accent", "cafe", "diacritic", "allow", "extended"],
             kind: SettingKind::Bool { default: true },
             restart_required: false,
             hidden_in_minimal: false,
@@ -1403,8 +1410,10 @@ pub fn default_settings() -> Vec<SettingMeta> {
             key: "input_sanitize.unicode_letters",
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
-            label: "Allow Unicode letters",
-            description: "Keep non-Latin letters (CJK, Cyrillic, Greek, …).",
+            label: "Non-English letters",
+            description: "Allow scripts such as 中文, 日本語, 한국어, Русский, Ελληνικά. \
+                          Off under Balanced; turn on for multilingual work \
+                          (or use the Multilingual profile).",
             keywords: &["unicode", "letters", "cjk", "cyrillic", "greek", "language", "allow"],
             kind: SettingKind::Bool { default: false },
             restart_required: false,
@@ -1414,9 +1423,10 @@ pub fn default_settings() -> Vec<SettingMeta> {
             key: "input_sanitize.unicode_punctuation",
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
-            label: "Allow Unicode punctuation",
-            description: "Keep non-ASCII punctuation and symbols.",
-            keywords: &["punctuation", "symbols", "unicode", "allow"],
+            label: "Fancy punctuation",
+            description: "Allow curly quotes, dashes, and other non-keyboard punctuation \
+                          (e.g. “ ” — …). Straight \" ' - always work.",
+            keywords: &["punctuation", "symbols", "unicode", "allow", "quotes", "dash"],
             kind: SettingKind::Bool { default: false },
             restart_required: false,
             hidden_in_minimal: false,
@@ -1425,9 +1435,10 @@ pub fn default_settings() -> Vec<SettingMeta> {
             key: "input_sanitize.emoji",
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
-            label: "Allow emoji",
-            description: "Keep basic emoji in terminal input. Exotic flags/skin-tones/\
-                          token-stuffing chrome still strip before the model.",
+            label: "Emoji",
+            description: "Allow normal smileys and pictographs (😀 👍 ✅). \
+                          Flag spam, skin-tone sequences, and other token-heavy emoji \
+                          are still removed before the model sees them.",
             keywords: &["emoji", "smiley", "pictograph", "allow"],
             kind: SettingKind::Bool { default: true },
             restart_required: false,
@@ -1437,8 +1448,10 @@ pub fn default_settings() -> Vec<SettingMeta> {
             key: "input_sanitize.math_symbols",
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
-            label: "Allow math symbols",
-            description: "Keep mathematical operators (not lookalike letters).",
+            label: "Math operators",
+            description: "Allow symbols such as ≤ ≥ ∈ √ ∑ ±. \
+                          Fake “lookalike” letters that mimic Latin (math bold A, …) \
+                          are always removed as a security measure.",
             keywords: &["math", "symbols", "operators", "allow"],
             kind: SettingKind::Bool { default: true },
             restart_required: false,
@@ -1448,8 +1461,9 @@ pub fn default_settings() -> Vec<SettingMeta> {
             key: "input_sanitize.tab",
             category: SettingCategory::Editor,
             owner: SettingOwner::Pager,
-            label: "Allow tab character",
-            description: "Keep literal tab characters (newline is always kept).",
+            label: "Tab character",
+            description: "Allow the Tab key / indent character in pasted code. \
+                          Newlines are always kept either way.",
             keywords: &["tab", "indent", "whitespace", "allow"],
             kind: SettingKind::Bool { default: true },
             restart_required: false,

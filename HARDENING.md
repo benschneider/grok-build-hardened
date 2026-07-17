@@ -346,21 +346,21 @@ latin_extended = "keep"   # example opt-in
 ```
 
 ```text
-/settings → Editor & Input → Input sanitize profile   # strict | balanced | multilingual
-/settings → Editor & Input → Input sanitizer          # fine-tune toggles
+/settings → Editor & Input → Input filter profile   # Strict | Balanced | Multilingual
+/settings → Editor & Input → Input sanitizer        # fine-tune toggles
 /input-allow unicode_letters --user
 /input-deny emoji
 /input-allow status
 ```
 
-**Profiles** (capability keep sets; security always strips):
+**Profiles** (what you can type/paste; invisible spoof chars always removed):
 
-| Profile | Keeps |
-|---------|--------|
-| `strict` | ASCII only |
-| `balanced` (default) | emoji, Latin accents, math ops, tabs |
-| `multilingual` | balanced + Unicode letters & punctuation |
-| `custom` | hand-tuned mix from toggles |
+| Profile | What you get |
+|---------|----------------|
+| **Strict (ASCII only)** | Plain keyboard characters only |
+| **Balanced** (default) | Accents (café), smileys, math (≤ ∈), tabs |
+| **Multilingual** | Balanced + 中文 / 日本語 / Русский / … + fancy punctuation |
+| **Custom** | Whatever you set with the individual toggles |
 
 Config: `profile = "balanced"` under `[input_sanitize]`, plus optional per-category
 overrides. Settings modal applies live and persists to user `config.toml`.
