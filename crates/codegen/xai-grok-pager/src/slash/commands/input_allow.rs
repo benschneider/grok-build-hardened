@@ -1,71 +1,121 @@
-//! `/input-allow`, `/input-deny`, `/input-sanitize` — category switch table for
-//! the hardened ASCII-keyboard input filter.
-
-use xai_grok_input_sanitize::RiskCategory;
+//! `/input-filter` — open the Input filter menu (settings UI, pre-filtered).
+//!
+//! Same controls live under `/settings` → Editor & Input.
+//!
+//! Optional args:
+//! - profile name (`strict` / `balanced` / `multilingual`) — apply without opening UI
+//! - `status` — print the current policy summary
+//!
+//! Aliases: `/input-allow`, `/input-sanitize`, `/sanitize`, `/input-deny`.
 
 use crate::app::actions::Action;
-use crate::slash::command::{CommandExecCtx, CommandResult, SlashCommand};
+use crate::slash::command::{AppCtx, ArgItem, CommandExecCtx, CommandResult, SlashCommand};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Scope {
-    Session,
-    User,
-    Project,
+/// Filter query for the settings modal — matches the Input filter profile
+/// and Input sanitizer rows under Editor & Input.
+const SETTINGS_FILTER: &str = "input filter";
+
+fn open_menu() -> CommandResult {
+    CommandResult::Action(Action::OpenSettingsFiltered {
+        query: SETTINGS_FILTER.into(),
+    })
 }
 
-impl Scope {
-    fn parse(s: &str) -> Option<Self> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "--session" | "session" => Some(Self::Session),
-            "--user" | "user" => Some(Self::User),
-            "--project" | "project" => Some(Self::Project),
-            _ => None,
-        }
-    }
-}
-
-/// `/input-allow <category>[,category...] [--session|--user|--project]`
+/// `/input-filter` [profile|status]
 pub struct InputAllowCommand;
 
 impl SlashCommand for InputAllowCommand {
     fn name(&self) -> &str {
-        "input-allow"
+        "input-filter"
     }
 
     fn description(&self) -> &str {
-        "Allow extra input character categories (latin, emoji, …) for this session or config"
+        "Open the input filter menu (profiles and character allows)"
     }
 
     fn usage(&self) -> &str {
-        "/input-allow <category>[,…] [--session|--user|--project] | /input-allow status"
+        "/input-filter [strict|balanced|multilingual|status]"
     }
 
     fn takes_args(&self) -> bool {
         true
     }
 
+    fn args_required(&self) -> bool {
+        false
+    }
+
+    fn arg_placeholder(&self) -> Option<&str> {
+        Some("[profile]")
+    }
+
     fn aliases(&self) -> &[&str] {
-        &["input-sanitize"]
+        &["input-allow", "input-sanitize", "sanitize"]
+    }
+
+    fn suggest_args(&self, _ctx: &AppCtx, _args_query: &str) -> Option<Vec<ArgItem>> {
+        Some(vec![
+            ArgItem {
+                display: "Open menu…".into(),
+                match_text: "open menu ui settings".into(),
+                insert_text: "".into(),
+                description: "Open the input filter menu (same as /settings → Input filter)"
+                    .into(),
+            },
+            ArgItem {
+                display: "strict".into(),
+                match_text: "strict ascii".into(),
+                insert_text: "strict".into(),
+                description: "ASCII only (max filter)".into(),
+            },
+            ArgItem {
+                display: "balanced".into(),
+                match_text: "balanced recommended".into(),
+                insert_text: "balanced".into(),
+                description: "Accents, emoji, math, tabs (default)".into(),
+            },
+            ArgItem {
+                display: "multilingual".into(),
+                match_text: "multilingual i18n languages".into(),
+                insert_text: "multilingual".into(),
+                description: "Balanced + non-English scripts".into(),
+            },
+            ArgItem {
+                display: "status".into(),
+                match_text: "status show policy".into(),
+                insert_text: "status".into(),
+                description: "Print current policy summary".into(),
+            },
+        ])
     }
 
     fn run(&self, _ctx: &mut CommandExecCtx, args: &str) -> CommandResult {
         let args = args.trim();
-        if args.is_empty() || args.eq_ignore_ascii_case("status") {
+        if args.is_empty() {
+            return open_menu();
+        }
+        if args.eq_ignore_ascii_case("status") || args.eq_ignore_ascii_case("show") {
             return CommandResult::Action(Action::InputSanitizeStatus);
         }
-        match parse_allow_args(args) {
-            Ok((cats, scope)) => CommandResult::Action(Action::InputSanitizeAllow {
-                categories: cats.iter().map(|c| c.as_str().to_string()).collect(),
-                session_only: matches!(scope, Scope::Session),
-                user_config: matches!(scope, Scope::User),
-                project_config: matches!(scope, Scope::Project),
-            }),
-            Err(msg) => CommandResult::Error(msg),
+        if args.eq_ignore_ascii_case("ui")
+            || args.eq_ignore_ascii_case("settings")
+            || args.eq_ignore_ascii_case("open")
+            || args.eq_ignore_ascii_case("menu")
+        {
+            return open_menu();
         }
+        // Named profile shortcut (apply immediately, no modal).
+        if let Some(profile) = xai_grok_input_sanitize::SanitizeProfile::parse(args) {
+            return CommandResult::Action(Action::SetInputSanitizeProfile(
+                profile.as_str().to_string(),
+            ));
+        }
+        // Unknown / legacy CLI flags → open the menu (no cryptic errors).
+        open_menu()
     }
 }
 
-/// `/input-deny <category>[,…] [--session]`
+/// `/input-deny` — same menu (turn allows off with the toggles there).
 pub struct InputDenyCommand;
 
 impl SlashCommand for InputDenyCommand {
@@ -74,79 +124,104 @@ impl SlashCommand for InputDenyCommand {
     }
 
     fn description(&self) -> &str {
-        "Revoke allowed input categories (back to strip)"
+        "Open the input filter menu (turn off allows there)"
     }
 
     fn usage(&self) -> &str {
-        "/input-deny <category>[,…] [--session]"
+        "/input-deny"
     }
 
-    fn takes_args(&self) -> bool {
-        true
+    fn run(&self, _ctx: &mut CommandExecCtx, _args: &str) -> CommandResult {
+        open_menu()
     }
-
-    fn run(&self, _ctx: &mut CommandExecCtx, args: &str) -> CommandResult {
-        let args = args.trim();
-        if args.is_empty() {
-            return CommandResult::Error(
-                "Usage: /input-deny <category>[,…] [--session]".into(),
-            );
-        }
-        match parse_allow_args(args) {
-            Ok((cats, _scope)) => CommandResult::Action(Action::InputSanitizeDeny {
-                categories: cats.iter().map(|c| c.as_str().to_string()).collect(),
-            }),
-            Err(msg) => CommandResult::Error(msg),
-        }
-    }
-}
-
-fn parse_allow_args(args: &str) -> Result<(Vec<RiskCategory>, Scope), String> {
-    let mut scope = Scope::Session;
-    let mut cats = Vec::new();
-    for tok in args.split_whitespace() {
-        if let Some(s) = Scope::parse(tok) {
-            scope = s;
-            continue;
-        }
-        for part in tok.split(',') {
-            let part = part.trim();
-            if part.is_empty() {
-                continue;
-            }
-            let Some(cat) = RiskCategory::parse(part) else {
-                return Err(format!(
-                    "Unknown category `{part}`. Try: latin_extended, unicode_letters, emoji, tab, math_symbols, …"
-                ));
-            };
-            if !cat.allow_user_keep() {
-                return Err(format!(
-                    "Category `{}` is security-sensitive and cannot be enabled.",
-                    cat.as_str()
-                ));
-            }
-            cats.push(cat);
-        }
-    }
-    if cats.is_empty() {
-        return Err("Specify at least one category (e.g. latin_extended).".into());
-    }
-    Ok((cats, scope))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::acp::model_state::ModelState;
 
-    #[test]
-    fn parses_session_latin() {
-        let (cats, scope) = parse_allow_args("latin_extended --session").unwrap();
-        assert_eq!(cats, vec![RiskCategory::LatinExtended]);
-        assert_eq!(scope, Scope::Session);
+    static DEFAULT_BUNDLE_STATE: crate::app::bundle::BundleState =
+        crate::app::bundle::BundleState {
+            has_cache: false,
+            version: String::new(),
+            personas: Vec::new(),
+            roles: Vec::new(),
+            agents: Vec::new(),
+            skills: Vec::new(),
+            persona_details: Vec::new(),
+            role_details: Vec::new(),
+        };
+
+    fn make_ctx<'a>(models: &'a ModelState) -> CommandExecCtx<'a> {
+        CommandExecCtx {
+            models,
+            session_id: None,
+            bundle_state: &DEFAULT_BUNDLE_STATE,
+            screen_mode: crate::app::ScreenMode::Inline,
+            pager_state: crate::settings::PagerLocalSnapshot::default(),
+        }
     }
 
     #[test]
-    fn rejects_bidi() {
-        assert!(parse_allow_args("bidi_controls").is_err());
+    fn empty_opens_settings_filtered() {
+        let models = ModelState::default();
+        let mut ctx = make_ctx(&models);
+        let r = InputAllowCommand.run(&mut ctx, "");
+        match r {
+            CommandResult::Action(Action::OpenSettingsFiltered { query }) => {
+                assert_eq!(query, SETTINGS_FILTER);
+            }
+            other => panic!("expected OpenSettingsFiltered, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn command_name_is_input_filter() {
+        assert_eq!(InputAllowCommand.name(), "input-filter");
+        assert!(InputAllowCommand.aliases().contains(&"input-allow"));
+    }
+
+    #[test]
+    fn balanced_sets_profile() {
+        let models = ModelState::default();
+        let mut ctx = make_ctx(&models);
+        let r = InputAllowCommand.run(&mut ctx, "balanced");
+        match r {
+            CommandResult::Action(Action::SetInputSanitizeProfile(p)) => {
+                assert_eq!(p, "balanced");
+            }
+            other => panic!("expected SetInputSanitizeProfile, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn status_shows_policy() {
+        let models = ModelState::default();
+        let mut ctx = make_ctx(&models);
+        assert!(matches!(
+            InputAllowCommand.run(&mut ctx, "status"),
+            CommandResult::Action(Action::InputSanitizeStatus)
+        ));
+    }
+
+    #[test]
+    fn deny_opens_menu() {
+        let models = ModelState::default();
+        let mut ctx = make_ctx(&models);
+        assert!(matches!(
+            InputDenyCommand.run(&mut ctx, "emoji"),
+            CommandResult::Action(Action::OpenSettingsFiltered { .. })
+        ));
+    }
+
+    #[test]
+    fn legacy_flags_open_menu_not_error() {
+        let models = ModelState::default();
+        let mut ctx = make_ctx(&models);
+        assert!(matches!(
+            InputAllowCommand.run(&mut ctx, "latin_extended --user"),
+            CommandResult::Action(Action::OpenSettingsFiltered { .. })
+        ));
     }
 }

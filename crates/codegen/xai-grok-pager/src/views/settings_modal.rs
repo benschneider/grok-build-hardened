@@ -195,13 +195,30 @@ impl SettingsModalState {
         ui_snapshot: UiConfig,
         pager_snapshot: PagerLocalSnapshot,
     ) -> Self {
+        Self::new_with_query(registry, ui_snapshot, pager_snapshot, "")
+    }
+
+    /// Like [`Self::new`], but pre-fills the filter (e.g. `"input filter"` from
+    /// `/input-allow`).
+    pub fn new_with_query(
+        registry: Arc<SettingsRegistry>,
+        ui_snapshot: UiConfig,
+        pager_snapshot: PagerLocalSnapshot,
+        query: &str,
+    ) -> Self {
         let rows = build_rows(&registry);
-        // Start on the first selectable (non-header) row.
-        let selected = rows
+        let query = query.to_string();
+        let filtered_cache = compute_filtered(&rows, &registry, &query);
+        // Prefer first matching setting row under the filter.
+        let selected = filtered_cache
             .iter()
-            .position(|r| matches!(r, RowEntry::Setting { .. }))
+            .copied()
+            .find(|&i| matches!(rows.get(i), Some(RowEntry::Setting { .. })))
+            .or_else(|| {
+                rows.iter()
+                    .position(|r| matches!(r, RowEntry::Setting { .. }))
+            })
             .unwrap_or(0);
-        let filtered_cache = compute_filtered(&rows, &registry, "");
         Self {
             window: ModalWindowState::new(),
             registry,
@@ -211,8 +228,8 @@ impl SettingsModalState {
             selected,
             scroll_offset: 0,
             mode: SettingsModalMode::Browse,
-            query: String::new(),
-            query_cursor: 0,
+            query_cursor: query.len(),
+            query,
             filtered_cache,
             list_area: Rect::default(),
             row_rects: Vec::new(),

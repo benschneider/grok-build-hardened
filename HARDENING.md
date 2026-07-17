@@ -346,12 +346,13 @@ latin_extended = "keep"   # example opt-in
 ```
 
 ```text
-/settings → Editor & Input → Input filter profile   # Strict | Balanced | Multilingual
-/settings → Editor & Input → Input sanitizer        # fine-tune toggles
-/input-allow unicode_letters --user
-/input-deny emoji
-/input-allow status
+/input-filter             # open Input filter menu (settings UI, pre-filtered)
+/input-filter balanced    # apply a profile without opening the UI
+/input-filter status      # print current policy
+/settings                 # full settings → Editor & Input → Input filter profile
 ```
+
+Aliases for the menu: `/input-allow`, `/input-sanitize`, `/sanitize`, `/input-deny`.
 
 **Profiles** (what you can type/paste; invisible spoof chars always removed):
 

@@ -143,6 +143,15 @@ pub(in crate::app::dispatch) fn dispatch_open_howto_guides(app: &mut AppView) ->
 /// Open the settings modal. Reads the live `UiConfig` snapshot
 /// (sans-IO). Single-instance: `debug_assert!` catches routing bugs.
 pub(in crate::app::dispatch) fn dispatch_open_settings(app: &mut AppView) -> Vec<Effect> {
+    dispatch_open_settings_filtered(app, "")
+}
+
+/// Open settings with an optional filter query (e.g. `"input filter"` from
+/// `/input-allow`).
+pub(in crate::app::dispatch) fn dispatch_open_settings_filtered(
+    app: &mut AppView,
+    query: &str,
+) -> Vec<Effect> {
     use crate::views::modal::ActiveModal;
     use crate::views::settings_modal::SettingsModalState;
 
@@ -179,7 +188,7 @@ pub(in crate::app::dispatch) fn dispatch_open_settings(app: &mut AppView) -> Vec
         return vec![];
     }
 
-    tracing::info!(target: "settings", "opened modal");
+    tracing::info!(target: "settings", query = %query, "opened modal");
 
     let pager_snapshot = crate::settings::PagerLocalSnapshot {
         multiline_mode: agent.multiline_mode,
@@ -208,10 +217,11 @@ pub(in crate::app::dispatch) fn dispatch_open_settings(app: &mut AppView) -> Vec
             &agent.input_sanitize.policy(),
         ),
     };
-    let state = Box::new(SettingsModalState::new(
+    let state = Box::new(SettingsModalState::new_with_query(
         registry,
         ui_snapshot,
         pager_snapshot,
+        query,
     ));
     agent.active_modal = Some(ActiveModal::Settings { state });
     vec![]
