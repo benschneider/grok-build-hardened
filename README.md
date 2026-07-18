@@ -53,7 +53,10 @@ full MCP/plugin trust, OS isolation you did not enable, or any guarantee against
 prompt injection.
 
 Prefer opting into sandbox (`--sandbox workspace` or stricter) rather than
-trusting any name that sounds security-related.
+trusting any name that sounds security-related. Public name:
+[`benschneider/grok-build-fork`](https://github.com/benschneider/grok-build-fork)
+— a personal fork, not a hardened product.
+
 ---
 
 ## Build from source
