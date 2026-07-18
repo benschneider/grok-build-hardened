@@ -1213,6 +1213,22 @@ pub(in crate::app::dispatch) fn set_input_sanitize_category(
     vec![]
 }
 
+
+pub(in crate::app::dispatch) fn set_contextual_hint_ssh_wrap(
+    app: &mut AppView,
+    new: bool,
+) -> Vec<Effect> {
+    let prev = app.current_ui.contextual_hints.ssh_wrap;
+    set_contextual_hint(
+        app,
+        "contextual_hints.ssh_wrap",
+        "SSH wrap hint",
+        prev,
+        |h, v| h.ssh_wrap = v,
+        new,
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Theme settings: `theme`, `auto_dark_theme`, `auto_light_theme`.
 //

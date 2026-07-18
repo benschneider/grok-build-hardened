@@ -76,8 +76,9 @@ use super::settings::setters::{
     preview_auto_light_theme, preview_theme, set_ask_user_question_timeout_enabled,
     set_auto_dark_theme, set_auto_light_theme, set_auto_update, set_collapsed_edit_blocks,
     set_compact_mode, set_contextual_hint_image_input, set_contextual_hint_plan_mode,
-    set_contextual_hint_send_now, set_contextual_hint_small_screen, set_contextual_hint_undo,
-    set_contextual_hint_word_select, set_default_model, set_default_selected_permission,
+    set_contextual_hint_send_now, set_contextual_hint_small_screen, set_contextual_hint_ssh_wrap,
+    set_contextual_hint_undo, set_contextual_hint_word_select, set_default_model,
+    set_default_selected_permission,
     set_display_refresh_auto_cadence, set_fork_secondary_model, set_group_tool_verbs,
     set_hunk_tracker_mode, set_input_sanitize_analyze, set_input_sanitize_category,
     set_input_sanitize_enabled, set_input_sanitize_notify, set_input_sanitize_profile,
@@ -119,6 +120,9 @@ use crate::app::app_view::{ActiveView, AppView, AuthState};
 use crate::scrollback::types::DisplayMode;
 use crate::views::session_picker::CONTENT_EXPAND_OFFSET;
 use xai_grok_telemetry::session_ctx::log_event;
+pub(super) fn auth_copy_was_confirmed(delivery: crate::clipboard::ClipboardDelivery) -> bool {
+    delivery == crate::clipboard::ClipboardDelivery::Confirmed
+}
 /// Dispatch an action: mutate state, return effects to execute.
 ///
 /// The returned `Vec<Effect>` may be empty (pure state mutation) or contain
@@ -615,6 +619,26 @@ pub(crate) fn dispatch(action: Action, app: &mut AppView) -> Vec<Effect> {
                 server_name,
             }]
         }
+        Action::McpSetupSubmit {
+            server_name,
+            values,
+        } => {
+            let ActiveView::Agent(id) = app.active_view else {
+                return vec![];
+            };
+            let Some(agent) = app.agents.get_mut(&id) else {
+                return vec![];
+            };
+            let Some(session_id) = agent.session.session_id.clone() else {
+                return vec![];
+            };
+            vec![Effect::McpSetupSubmit {
+                agent_id: id,
+                session_id,
+                server_name,
+                values,
+            }]
+        }
         Action::ReloadSkills => {
             let ActiveView::Agent(id) = app.active_view else {
                 return vec![];
@@ -949,6 +973,7 @@ pub(crate) fn dispatch(action: Action, app: &mut AppView) -> Vec<Effect> {
         Action::SetContextualHintSendNow(v) => set_contextual_hint_send_now(app, v),
         Action::SetContextualHintSmallScreen(v) => set_contextual_hint_small_screen(app, v),
         Action::SetContextualHintWordSelect(v) => set_contextual_hint_word_select(app, v),
+        Action::SetContextualHintSshWrap(v) => set_contextual_hint_ssh_wrap(app, v),
         Action::SetInputSanitizeEnabled(v) => set_input_sanitize_enabled(app, v),
         Action::SetInputSanitizeNotify(v) => set_input_sanitize_notify(app, v),
         Action::SetInputSanitizeAnalyze(v) => set_input_sanitize_analyze(app, v),
@@ -1042,7 +1067,8 @@ pub(crate) fn dispatch(action: Action, app: &mut AppView) -> Vec<Effect> {
                 ..
             } = &app.auth_state
             {
-                app.auth_clipboard_copied = crate::clipboard::SystemClipboard::try_set(url);
+                app.auth_clipboard_copied =
+                    auth_copy_was_confirmed(crate::clipboard::SystemClipboard::try_set(url));
             }
             if app.auth_clipboard_copied {
                 vec![Effect::ScheduleClearAuthCopied]

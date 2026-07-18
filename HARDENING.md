@@ -427,6 +427,7 @@ cargo test -p xai-tool-runtime --lib extract_strips
 | 2026-07-16 | Model-bound hard strip + architecture simplify (named policies; demote system-prompt re-filter) |
 | 2026-07-16 | Ported upstream monorepo fix: HTTP hooks disable redirect follow (SSRF via 3xx) |
 | 2026-07-17 | Cherry-picked monorepo sync (xai-org/grok-build `8adf901`) minus settings_modal split + README; kept fork input-filter UI |
+| 2026-07-18 | Cherry-picked monorepo sync xai-org/grok-build `98c3b24` (sandbox/auth/TUI/session fixes); kept settings_modal + fork README |
 
 ---
 

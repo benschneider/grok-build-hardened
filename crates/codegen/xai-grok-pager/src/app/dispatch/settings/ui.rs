@@ -738,6 +738,9 @@ pub(in crate::app::dispatch) fn action_for_reset(
         ("contextual_hints.word_select", SettingValue::Bool(b)) => {
             Some(Action::SetContextualHintWordSelect(*b))
         }
+        ("contextual_hints.ssh_wrap", SettingValue::Bool(b)) => {
+            Some(Action::SetContextualHintSshWrap(*b))
+        }
         ("input_sanitize.profile", SettingValue::Enum(s)) => {
             Some(Action::SetInputSanitizeProfile((*s).to_string()))
         }
@@ -967,6 +970,9 @@ pub(in crate::app::dispatch) fn apply_setting_rollback(
         }
         ("contextual_hints.word_select", SettingValue::Bool(b)) => {
             set_contextual_hint_inner(app, |h, v| h.word_select = v, *b)
+        }
+        ("contextual_hints.ssh_wrap", SettingValue::Bool(b)) => {
+            set_contextual_hint_inner(app, |h, v| h.ssh_wrap = v, *b)
         }
         ("respect_manual_folds", SettingValue::Bool(b)) => set_respect_manual_folds_inner(app, *b),
         ("theme", SettingValue::Enum(s)) => set_theme_inner(app, s),
